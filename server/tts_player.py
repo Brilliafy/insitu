@@ -189,6 +189,9 @@ def stop_speech():
 
     # Safety termination of child audio players and piper instances
     try:
+        subprocess.run(["pkill", "-9", "-f", "pw-play.*insitu"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-9", "-f", "mpv.*insitu"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-9", "-f", "ffplay.*insitu"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-9", "-f", "pw-play.*s16"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-9", "-f", "aplay.*S16_LE"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-9", "-f", "piper.*onnx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -219,8 +222,50 @@ def get_audio_player_cmd(sample_rate: int):
         return f"aplay -q -r {sample_rate} -f S16_LE -c 1 -"
     return "cat > /dev/null"
 
-def speak_piper(cleaned_text: str, model_name: str = "en_US-lessac-medium"):
+def speak_edge_tts(cleaned_text: str, voice_id: str = "en-US-GuyNeural"):
+    """Synthesizes speech using Microsoft Edge Neural TTS with high-fidelity output."""
+    import edge_tts
+    import asyncio
+
+    mp3_file = "/tmp/insitu_edge_speech.mp3"
+
+    async def _synth():
+        comm = edge_tts.Communicate(cleaned_text, voice_id)
+        await comm.save(mp3_file)
+
+    try:
+        asyncio.run(_synth())
+    except Exception as e:
+        print(f"[InSitu TTS] Edge-TTS synthesis error: {e}, falling back to Piper", file=sys.stderr)
+        speak_piper(cleaned_text)
+        return
+
+    # Direct native PipeWire / mpv / ffplay audio streaming
+    player = None
+    if shutil.which("pw-play"):
+        player = ["pw-play", mp3_file]
+    elif shutil.which("mpv"):
+        player = ["mpv", "--no-video", "--really-quiet", mp3_file]
+    elif shutil.which("ffplay"):
+        player = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", mp3_file]
+
+    if player:
+        proc = subprocess.Popen(player, preexec_fn=os.setsid)
+        with open(PID_FILE, "w") as f:
+            f.write(str(proc.pid))
+        try:
+            proc.wait()
+        finally:
+            if os.path.exists(PID_FILE):
+                try:
+                    os.remove(PID_FILE)
+                except Exception:
+                    pass
+
+def speak_piper(cleaned_text: str, model_name: str = "en_US-bryce-medium"):
     model_path = os.path.join(PIPER_MODELS_DIR, f"{model_name}.onnx")
+    if not os.path.exists(model_path):
+        model_path = os.path.join(PIPER_MODELS_DIR, "en_US-bryce-medium.onnx")
     if not os.path.exists(model_path):
         model_path = os.path.join(PIPER_MODELS_DIR, "en_US-lessac-medium.onnx")
 
@@ -231,7 +276,14 @@ def speak_piper(cleaned_text: str, model_name: str = "en_US-lessac-medium"):
     proc = subprocess.Popen(cmd, shell=True, preexec_fn=os.setsid)
     with open(PID_FILE, "w") as f:
         f.write(str(proc.pid))
-    proc.wait()
+    try:
+        proc.wait()
+    finally:
+        if os.path.exists(PID_FILE):
+            try:
+                os.remove(PID_FILE)
+            except Exception:
+                pass
 
 _WARM_KOKORO = None
 
@@ -290,14 +342,16 @@ def speak(message: str, blocking: bool = True, force: bool = False):
     stop_speech()
 
     cfg = load_tts_config()
-    engine = cfg.get("engine", "piper")
-    voice_id = cfg.get("voice_id", "en_US-lessac-medium")
+    engine = cfg.get("engine", "edge-tts")
+    voice_id = cfg.get("voice_id", "en-US-GuyNeural")
     speed = float(cfg.get("speed", 1.05))
 
     notify_bridge(cleaned, speaking=True)
 
     try:
-        if engine == "kokoro":
+        if engine == "edge-tts":
+            speak_edge_tts(cleaned, voice_id=voice_id)
+        elif engine == "kokoro":
             speak_kokoro(cleaned, voice_id=voice_id, speed=speed)
         else:
             speak_piper(cleaned, model_name=voice_id)

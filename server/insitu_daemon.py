@@ -216,40 +216,31 @@ class InSituRuntime:
             return False
 
         cfg = tts_player.load_tts_config()
-        selected_engine = engine or cfg.get("engine", "piper")
-        selected_voice = voice_id or cfg.get("voice_id", "en_US-lessac-medium")
+        selected_engine = engine or cfg.get("engine", "edge-tts")
+        selected_voice = voice_id or cfg.get("voice_id", "en-US-GuyNeural")
         speed = float(cfg.get("speed", 1.05))
 
         print(f"[InSitu Daemon] Speaking ({selected_engine} - {selected_voice}): '{cleaned[:50]}...'")
 
-        # Fast path 1: Warm Piper Voice (< 300ms)
-        if selected_engine == "piper" and self.piper_voice:
+        # Fast path 1: Edge-TTS (Human Studio Quality)
+        if selected_engine == "edge-tts":
             try:
-                t0 = time.time()
-                wav_file = "/tmp/insitu_speech.wav"
-                with wave.open(wav_file, "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(22050)
-                    for chunk in self.piper_voice.synthesize(cleaned):
-                        wf.writeframes(chunk.audio_int16_bytes)
-
-                synth_ms = (time.time() - t0) * 1000
-                player_bin = tts_player.shutil.which("pw-play") or tts_player.shutil.which("aplay")
-                if player_bin:
-                    player_cmd = [player_bin, wav_file] if "pw-play" in player_bin else [player_bin, "-q", wav_file]
-                    proc = subprocess.Popen(player_cmd, preexec_fn=os.setsid)
-                    self.active_tts_proc = proc
-                    with open(tts_player.PID_FILE, "w") as f:
-                        f.write(str(proc.pid))
-                print(f"[InSitu Daemon] Piper synthesized in {synth_ms:.1f}ms! Playback started.")
+                threading.Thread(target=tts_player.speak_edge_tts, args=(cleaned, selected_voice), daemon=True).start()
                 return True
             except Exception as e:
-                print(f"[InSitu Daemon] Piper direct stream error: {e}", file=sys.stderr)
+                print(f"[InSitu Daemon] Edge-TTS error: {e}", file=sys.stderr)
 
-        # Fast path 2: Warm Kokoro Synthesis
+        # Fast path 2: Piper Voices (Ultra-Low Latency Offline)
+        if selected_engine == "piper":
+            try:
+                threading.Thread(target=tts_player.speak_piper, args=(cleaned, selected_voice), daemon=True).start()
+                return True
+            except Exception as e:
+                print(f"[InSitu Daemon] Piper speak error: {e}", file=sys.stderr)
+
+        # Fast path 3: Kokoro (Expressive)
         try:
-            threading.Thread(target=tts_player.speak, args=(cleaned,), kwargs={"force": True}, daemon=True).start()
+            threading.Thread(target=tts_player.speak_kokoro, args=(cleaned, selected_voice, speed), daemon=True).start()
             return True
         except Exception as e:
             print(f"[InSitu Daemon] Kokoro speak error: {e}", file=sys.stderr)

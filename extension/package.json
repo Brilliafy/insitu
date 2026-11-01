@@ -2,7 +2,7 @@
   "name": "insitu",
   "displayName": "InSitu: In-Editor Voice & Socratic AI Mentor",
   "description": "In-Window Topmost HUD Overlay with Low-Latency STT/TTS Voice Dictation, Visual In-Editor Navigation, and Dual-Channel AI Mentorship",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "publisher": "brilliafy",
   "repository": {
     "type": "git",

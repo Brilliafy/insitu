@@ -74,13 +74,14 @@ async function ensureDaemonRunning() {
     if (fs.existsSync(DAEMON_SCRIPT) && fs.existsSync(PYTHON_BIN)) {
         console.log('[InSitu] Starting background persistent CUDA daemon...');
         try {
+            const outLog = fs.openSync('/tmp/insitu_daemon.log', 'a');
             const child = spawn(PYTHON_BIN, [DAEMON_SCRIPT], {
                 detached: true,
-                stdio: 'ignore'
+                stdio: ['ignore', outLog, outLog]
             });
             child.unref();
 
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 25; i++) {
                 await new Promise(r => setTimeout(r, 250));
                 if (await isDaemonOnline()) {
                     console.log('[InSitu] Daemon is now online!');
@@ -340,6 +341,9 @@ async function replayVoice(text?: string, force: boolean = false) {
 
     // 1. Fast Path: InSitu Daemon (prewarmed in RAM, sub-100ms dispatch)
     try {
+        if (!await isDaemonOnline()) {
+            ensureDaemonRunning().catch(() => {});
+        }
         if (await isDaemonOnline()) {
             await queryDaemon('/speak', {
                 text: msg,
@@ -698,6 +702,9 @@ async function startRecording(qp?: vscode.QuickPick<any>) {
 
     // 1. Fast Path: InSitu Persistent CUDA Daemon (< 1s turnaround, zero-cold-boot)
     try {
+        if (!await isDaemonOnline()) {
+            ensureDaemonRunning().catch(() => {});
+        }
         if (await isDaemonOnline()) {
             console.log('[InSitu] Starting dictation via warm CUDA daemon...');
             const silenceSec = silenceAutostop ? 0.8 : 999.0;
@@ -1456,7 +1463,22 @@ async function selectTTSModel() {
             const items: (vscode.QuickPickItem & { modelId?: string; modelName?: string; isCached?: boolean; action?: string })[] = [];
 
             items.push({
-                label: '⚡ TIER 1: ULTRA-LIGHTWEIGHT (Low CPU / Raspberry Pi / Weak PC)',
+                label: '✨ TIER 0: CLOUD NEURAL (Free, Studio Human Quality, 0 VRAM/CPU)',
+                kind: vscode.QuickPickItemKind.Separator
+            });
+            for (const m of models.filter(x => x.tier.includes('Tier 0'))) {
+                items.push({
+                    label: `${m.is_current ? '$(check) ' : '    '}${m.name}`,
+                    description: `0 MB RAM | ${m.params} $(pass-filled) Ready`,
+                    detail: m.description,
+                    modelId: m.id,
+                    modelName: m.name,
+                    isCached: true
+                });
+            }
+
+            items.push({
+                label: '⚡ TIER 1: ULTRA-LIGHTWEIGHT & INSTANT (<180ms Offline / Low PC)',
                 kind: vscode.QuickPickItemKind.Separator
             });
             for (const m of models.filter(x => x.tier.includes('Tier 1'))) {
@@ -1638,7 +1660,7 @@ async function selectTTSVoice() {
 
     const items: (vscode.QuickPickItem & { voiceId?: string; voiceName?: string })[] = [];
 
-    const accents = ['American', 'British', 'Japanese', 'Mandarin'];
+    const accents = ['American', 'British', 'Australian', 'Japanese', 'Mandarin'];
     for (const accent of accents) {
         const group = voices.filter(v => v.accent === accent);
         if (group.length > 0) {

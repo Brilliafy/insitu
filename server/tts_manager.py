@@ -24,16 +24,28 @@ PIPER_MODELS_DIR = "/home/Aelfwif/insitu/server/models/piper"
 
 PRESET_MODELS = [
     {
+        "id": "microsoft/edge-tts",
+        "name": "Edge Neural TTS (Microsoft)",
+        "tier": "Tier 0: Cloud Neural (Free / Human Studio Quality)",
+        "engine": "edge-tts",
+        "repo_id": "microsoft/edge-tts",
+        "params": "Cloud Neural",
+        "ram": "0 MB",
+        "type": "preset",
+        "recommended_for_weak_pc": True,
+        "description": "Studio human quality. 0 VRAM/CPU, perfect human cadence and tech pronunciation (Brackeys, CUDA, VS Code)."
+    },
+    {
         "id": "rhasspy/piper-voices",
-        "name": "Piper Voices (rhasspy)",
+        "name": "Piper High-Fidelity Voices (rhasspy)",
         "tier": "Tier 1: Ultra-Lightweight (Instant Latency / Ultra-Fast)",
         "engine": "piper",
         "repo_id": "rhasspy/piper-voices",
         "params": "15M-60M",
-        "ram": "< 50 MB",
+        "ram": "< 60 MB",
         "type": "preset",
         "recommended_for_weak_pc": True,
-        "description": "Ultra-low latency (<250ms), instant offline speech, 100+ voices across 30+ languages."
+        "description": "Ultra-low latency (<180ms), offline speech, deep natural tones (Bryce, Ryan, Lessac)."
     },
     {
         "id": "hexgrad/Kokoro-82M",
@@ -157,13 +169,29 @@ KOKORO_VOICES = [
     {"id": "zm_yunxi", "name": "Yunxi (Mandarin Male)", "accent": "Mandarin", "gender": "Male", "quality": "⭐⭐⭐⭐"}
 ]
 
+EDGE_VOICES = [
+    # American
+    {"id": "en-US-GuyNeural", "name": "Guy (US Male - Natural & Conversational)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-JennyNeural", "name": "Jenny (US Female - Crisp & Friendly)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-ChristopherNeural", "name": "Christopher (US Male - Deep & Authoritative)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-AriaNeural", "name": "Aria (US Female - Expressive)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-EricNeural", "name": "Eric (US Male - Smooth)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"},
+    # British
+    {"id": "en-GB-RyanNeural", "name": "Ryan (British Male - Tech Tutor)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-GB-SoniaNeural", "name": "Sonia (British Female - Academic)", "accent": "British", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-GB-ThomasNeural", "name": "Thomas (British Male - Clear)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐"},
+    # Australian
+    {"id": "en-AU-WilliamNeural", "name": "William (Australian Male - Warm)", "accent": "Australian", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-AU-NatashaNeural", "name": "Natasha (Australian Female - Articulate)", "accent": "Australian", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"}
+]
+
 PIPER_VOICES = [
+    {"id": "en_US-bryce-medium", "name": "Bryce (US Male - Deep & Resonant)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en_US-ryan-medium", "name": "Ryan (US Male - Fast & Energetic)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
     {"id": "en_US-lessac-medium", "name": "Lessac (US Female - Clear & Balanced)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐"},
-    {"id": "en_GB-alan-medium", "name": "Alan (British Male - Low Pitch)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐"},
     {"id": "en_US-amy-medium", "name": "Amy (US Female - Upbeat)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐"},
-    {"id": "en_US-bryce-medium", "name": "Bryce (US Male - Deep)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"},
     {"id": "en_US-joe-medium", "name": "Joe (US Male - Natural)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"},
-    {"id": "en_US-ryan-medium", "name": "Ryan (US Male - Fast)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"}
+    {"id": "en_GB-alan-medium", "name": "Alan (British Male - Low Pitch)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐"}
 ]
 
 def load_config() -> Dict[str, Any]:
@@ -190,7 +218,9 @@ def save_config(cfg: Dict[str, Any]) -> None:
         print(f"Error saving config: {e}", file=sys.stderr)
 
 def is_model_cached(model_id: str) -> bool:
-    if model_id == "hexgrad/Kokoro-82M":
+    if model_id == "microsoft/edge-tts":
+        return True
+    elif model_id == "hexgrad/Kokoro-82M":
         voices_bin = os.path.join(KOKORO_CACHE_DIR, "voices-v1.0.bin")
         hf_dir = os.path.expanduser("~/.cache/huggingface/hub/models--onnx-community--Kokoro-82M-v1.0-ONNX")
         return os.path.exists(voices_bin) and os.path.exists(hf_dir)
@@ -300,10 +330,12 @@ def list_models_json() -> str:
 
 def list_voices_json() -> str:
     cfg = load_config()
-    engine = cfg.get("engine", "kokoro")
-    current_voice = cfg.get("voice_id", "af_heart")
+    engine = cfg.get("engine", "edge-tts")
+    current_voice = cfg.get("voice_id", "en-US-GuyNeural")
 
-    if engine == "kokoro":
+    if engine == "edge-tts":
+        voices = EDGE_VOICES
+    elif engine == "kokoro":
         voices = KOKORO_VOICES
     else:
         voices = PIPER_VOICES
@@ -343,10 +375,12 @@ if __name__ == "__main__":
         cfg["model_id"] = args.set_model
         cfg["engine"] = engine
         # Reset default voice
-        if engine == "kokoro":
+        if engine == "edge-tts":
+            cfg["voice_id"] = "en-US-GuyNeural"
+        elif engine == "kokoro":
             cfg["voice_id"] = "af_heart"
         elif engine == "piper":
-            cfg["voice_id"] = "en_US-lessac-medium"
+            cfg["voice_id"] = "en_US-bryce-medium"
         save_config(cfg)
         print(json.dumps({"status": "ok", "model_id": args.set_model, "engine": engine, "voice_id": cfg["voice_id"]}))
     elif args.set_voice:
