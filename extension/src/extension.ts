@@ -286,9 +286,9 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     const cleanPrompt = prompt.trim();
     let textToSend = cleanPrompt;
     if (injectSocraticGuidance) {
-        textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nFollow dual-channel protocol: IMMEDIATELY output [SPEECH] 1-2 punchy spoken sentences (15-25 words max) directly answering the core question [/SPEECH] at the VERY START of your response (or call speak_to_user via MCP). Then provide your full written explanation and code below.`;
+        textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nDual-Channel Voice Protocol (MANDATORY): You MUST FIRST call the \`speak_to_user(message=...)\` MCP tool to speak 1-2 punchy spoken sentences (15-25 words max) directly answering the core question out loud to the user. Do NOT write [SPEECH] tags in chat. After calling \`speak_to_user\`, write your complete technical explanation and code in chat below.`;
     } else {
-        textToSend = `${cleanPrompt}\n\n[InSitu Addon: Mode ${currentMode}]`;
+        textToSend = `${cleanPrompt}\n\n[InSitu Addon: Mode ${currentMode}]\nPlease call \`speak_to_user(message=...)\` via MCP to speak aloud first.`;
     }
 
     // 1. Copy prompt to clipboard as universal fallback
@@ -493,16 +493,8 @@ function initTranscriptWatcherBaseline() {
 }
 
 function startTranscriptWatcher() {
-    if (transcriptWatcherTimer) return;
-    initTranscriptWatcherBaseline();
-
-    transcriptWatcherTimer = setInterval(() => {
-        try {
-            checkLatestTranscript();
-        } catch (e) {
-            console.error('[InSitu] Transcript watcher error:', e);
-        }
-    }, 120);
+    // Disabled in favor of direct MCP speak_to_user tool calls for max speed and zero CLI session bleed
+    console.log('[InSitu] Direct MCP tool dispatch active (transcript polling watcher disabled).');
 }
 
 function stopTranscriptWatcher() {

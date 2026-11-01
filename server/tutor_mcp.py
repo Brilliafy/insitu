@@ -79,34 +79,36 @@ async def clear_highlight() -> str:
 
 @mcp.tool()
 async def speak_to_user(message: str) -> str:
-    """Speaks a concise Socratic question, hint, or architectural consideration to the user out loud using local TTS (Kokoro-82M / Piper).
+    """Speaks a concise Socratic question, hint, or architectural consideration to the user out loud using the active TTS engine (Edge Neural / Piper / Kokoro).
     CRITICAL SPOKEN CONSTRAINTS:
     - Keep spoken audio SHORT (1-2 sentences, 15-25 words maximum).
     - Sound like an experienced human peer pair-programming with the user: natural, conversational, clear, and direct.
     - Adapt tone to the user's expertise level (junior vs senior).
     - Never read aloud raw syntax or multiline code blocks.
-    - Pose a focused question prompting the user on how to proceed, what invariants exist, or why an approach was chosen.
-    - You may also use [SPEECH] spoken question [/SPEECH] tags inside your message."""
+    - Directly answer the core question or pose a focused guiding question."""
     try:
-        # 1. Fast path: Forward to InSitu warm daemon (sub-100ms dispatch)
+        # 1. Fast path: Forward to InSitu warm daemon (sub-50ms dispatch)
         try:
+            cfg = tts_player.load_tts_config()
+            engine = cfg.get("engine", "edge-tts")
+            voice_id = cfg.get("voice_id", "en-US-GuyNeural")
             req = urllib.request.Request(
                 "http://127.0.0.1:6422/speak",
                 data=json.dumps({
                     "text": message,
-                    "engine": "piper",
-                    "voice_id": "en_US-lessac-medium"
+                    "engine": engine,
+                    "voice_id": voice_id
                 }).encode("utf-8"),
                 headers={"Content-Type": "application/json"}
             )
-            with urllib.request.urlopen(req, timeout=0.8):
-                return "Spoken message dispatched via warm InSitu Daemon."
+            with urllib.request.urlopen(req, timeout=1.5):
+                return f"Spoken audio playing aloud via InSitu Daemon ({engine} - {voice_id})."
         except Exception:
             pass
 
         # 2. Fallback: Launch directly in background thread with warm in-memory model
-        threading.Thread(target=tts_player.speak, args=(message,), kwargs={"blocking": True}, daemon=True).start()
-        return "Spoken message dispatched via InSitu TTS."
+        threading.Thread(target=tts_player.speak, args=(message,), kwargs={"force": True, "blocking": True}, daemon=True).start()
+        return "Spoken message dispatched via InSitu TTS fallback."
     except Exception as e:
         return f"Failed to speak message: {str(e)}"
 
