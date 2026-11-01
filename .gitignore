@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+extension/node_modules/
+
+# Build artifacts
+extension/out/
+*.vsix
+extension/*.vsix
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Caches & downloaded models
+.cache/
+server/models/*
+!server/models/.gitkeep
+
+# Local user configs
+stt_config.json
+tts_config.json
+*.pid
+*.sock
+
+# Logs & temp files
+*.log
+/tmp/
+.user_uploaded/
+.system_generated/
+
+# Sensitive files
+.env
+.env.*
+*.pem
+*.key

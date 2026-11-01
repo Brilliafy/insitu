@@ -1,0 +1,261 @@
+{
+  "name": "insitu",
+  "displayName": "InSitu: In-Editor Voice & Socratic AI Mentor",
+  "description": "In-Window Topmost HUD Overlay with Low-Latency STT/TTS Voice Dictation, Visual In-Editor Navigation, and Dual-Channel AI Mentorship",
+  "version": "0.3.0",
+  "publisher": "brilliafy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Brilliafy/insitu"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Education",
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "insitu-sidebar",
+          "title": "InSitu",
+          "icon": "$(mortar-board)"
+        }
+      ]
+    },
+    "views": {
+      "insitu-sidebar": [
+        {
+          "type": "webview",
+          "id": "insituView",
+          "name": "InSitu Voice & Mode HUD"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "insitu.openHUD",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t"
+      },
+      {
+        "command": "insitu.toggleMic",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m"
+      },
+      {
+        "command": "insitu.clearHighlight",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c",
+        "when": "insituHighlightActive || socraticHighlightActive"
+      },
+      {
+        "command": "insitu.stopSpeech",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s"
+      },
+      {
+        "command": "insitu.stopSpeech",
+        "key": "alt+s"
+      },
+      {
+        "command": "insitu.stopSpeech",
+        "key": "ctrl+alt+q",
+        "mac": "cmd+alt+q"
+      },
+      {
+        "command": "insitu.selectTTSVoice",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
+      },
+      {
+        "command": "insitu.selectTTSModel",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o"
+      },
+      {
+        "command": "insitu.toggleDevice",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g"
+      },
+      {
+        "command": "insitu.sendSelection",
+        "key": "ctrl+alt+i",
+        "mac": "cmd+alt+i",
+        "when": "editorHasSelection"
+      }
+    ],
+    "commands": [
+      {
+        "command": "insitu.openHUD",
+        "title": "InSitu: Open In-Window Overlay & Voice HUD",
+        "icon": "$(mortar-board)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.toggleMic",
+        "title": "InSitu: Toggle Voice Dictation (Speak)",
+        "icon": "$(mic)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.clearHighlight",
+        "title": "InSitu: Clear Code Highlight",
+        "icon": "$(clear-all)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.stopSpeech",
+        "title": "InSitu: Stop Speech (Silence Audio)",
+        "icon": "$(mute)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.sendSelection",
+        "title": "Tutor",
+        "icon": "$(mortar-board)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.selectSTTModel",
+        "title": "InSitu: Select / Download STT Model (Hugging Face)",
+        "icon": "$(cloud-download)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.toggleDevice",
+        "title": "InSitu: Toggle Hardware Acceleration (CPU / GPU CUDA)",
+        "icon": "$(zap)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.selectTTSModel",
+        "title": "InSitu: Select / Download TTS Model (Kokoro / Piper / Hugging Face)",
+        "icon": "$(cloud-download)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.selectTTSVoice",
+        "title": "InSitu: Select Preset Voice (54 Kokoro / Piper Voices)",
+        "icon": "$(unmute)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.setTTSCloneAudio",
+        "title": "InSitu: Configure Voice Cloning Reference Audio (.wav)",
+        "icon": "$(record)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.editPromptPrefix",
+        "title": "InSitu: Configure Coding Vocabulary Bias",
+        "icon": "$(symbol-keyword)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.stopMic",
+        "title": "InSitu: Stop Recording and Submit Prompt",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.cancelMic",
+        "title": "InSitu: Cancel Recording (Discard Audio)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.toggleVAD",
+        "title": "InSitu: Toggle 2s Silence Auto-Stop",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.setMode1",
+        "title": "InSitu: Switch to Mode 1 (Section Scaffold)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.setMode2",
+        "title": "InSitu: Switch to Mode 2 (Line-by-Line Step)",
+        "category": "InSitu"
+      },
+      {
+        "command": "insitu.setMode3",
+        "title": "InSitu: Switch to Mode 3 (Refactor / Doubt)",
+        "category": "InSitu"
+      },
+      {
+        "command": "socraticMentor.openHUD",
+        "title": "Socratic Tutor: Open In-Window Overlay & Voice HUD (Legacy Alias)",
+        "category": "InSitu (Legacy)"
+      },
+      {
+        "command": "socraticMentor.toggleMic",
+        "title": "Socratic Tutor: Toggle Voice Dictation (Speak) (Legacy Alias)",
+        "category": "InSitu (Legacy)"
+      },
+      {
+        "command": "socraticMentor.clearHighlight",
+        "title": "Socratic Tutor: Clear Code Highlight (Legacy Alias)",
+        "category": "InSitu (Legacy)"
+      },
+      {
+        "command": "socraticMentor.stopSpeech",
+        "title": "Socratic Tutor: Stop Speech (Silence Audio) (Legacy Alias)",
+        "category": "InSitu (Legacy)"
+      },
+      {
+        "command": "socraticMentor.sendSelection",
+        "title": "Tutor (Legacy Alias)",
+        "category": "InSitu (Legacy)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "insitu.sendSelection",
+          "group": "antigravity@1",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "insitu.sendSelection",
+          "group": "navigation@1",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "insitu.clearHighlight",
+          "group": "antigravity@2",
+          "when": "insituHighlightActive || socraticHighlightActive"
+        },
+        {
+          "command": "insitu.clearHighlight",
+          "group": "navigation@2",
+          "when": "insituHighlightActive || socraticHighlightActive"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "insitu.clearHighlight",
+          "group": "navigation",
+          "when": "insituHighlightActive || socraticHighlightActive"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.4.0"
+  }
+}
