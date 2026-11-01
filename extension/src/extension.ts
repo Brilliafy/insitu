@@ -993,9 +993,11 @@ function updateQuickPickRecordingUI(qp: vscode.QuickPick<any>, recording: boolea
         }
         qp.placeholder = "Ask Gemini / InSitu Mentor... (Enter to send, 🎙 to speak)";
 
-        const btnAddContext: vscode.QuickInputButton = {
-            iconPath: new vscode.ThemeIcon('add'),
-            tooltip: '+ Add Active File & Selection to Prompt'
+        const btnCodeEdits: vscode.QuickInputButton = {
+            iconPath: new vscode.ThemeIcon(allowCodeEdits ? 'edit' : 'lock'),
+            tooltip: allowCodeEdits
+                ? 'AI Code Modifications: ENABLED (Direct File Replacement) - Click to toggle Read-Only'
+                : 'AI Code Modifications: DISABLED (Read-Only / Explanations Only) - Click to enable Edits'
         };
 
         const btnMode: vscode.QuickInputButton = {
@@ -1016,8 +1018,10 @@ function updateQuickPickRecordingUI(qp: vscode.QuickPick<any>, recording: boolea
 
         const shortTTSModel = activeTTSModel.split('/').pop() || activeTTSModel;
         const btnTTSModel: vscode.QuickInputButton = {
-            iconPath: new vscode.ThemeIcon('symbol-audio'),
-            tooltip: `TTS Voice: ${activeTTSVoice} (${shortTTSModel}) ▾ (Click to switch model or voice)`
+            iconPath: new vscode.ThemeIcon(activeTTSEngine === 'none' ? 'mute' : 'megaphone'),
+            tooltip: activeTTSEngine === 'none'
+                ? 'TTS Voice: NONE (Muted) ▾ (Click to switch model or voice)'
+                : `TTS Voice: ${activeTTSVoice} (${shortTTSModel}) ▾ (Click to switch model or voice)`
         };
 
         const btnMute: vscode.QuickInputButton = {
@@ -1040,7 +1044,7 @@ function updateQuickPickRecordingUI(qp: vscode.QuickPick<any>, recording: boolea
             tooltip: `🎙️ Speak Prompt (${shortModelName} - ${activeSTTDevice.toUpperCase()})`
         };
 
-        const buttons: vscode.QuickInputButton[] = [btnAddContext, btnMode, btnDevice, btnSTTModel, btnTTSModel];
+        const buttons: vscode.QuickInputButton[] = [btnCodeEdits, btnMode, btnDevice, btnSTTModel, btnTTSModel];
         if (activeHighlightEditor) {
             buttons.push({
                 iconPath: new vscode.ThemeIcon('clear-all'),
@@ -1911,7 +1915,7 @@ function openInWindowHUD() {
                 mode: 3
             },
             {
-                label: `$(edit) AI File Modifications: ${allowCodeEdits ? 'ENABLED (Direct Code Replacement)' : 'DISABLED (Read-Only / Explanations Only)'}`,
+                label: `${allowCodeEdits ? '$(edit)' : '$(lock)'} AI File Modifications: ${allowCodeEdits ? 'ENABLED (Direct Code Replacement)' : 'DISABLED (Read-Only / Explanations Only)'}`,
                 description: allowCodeEdits
                     ? 'AI agent will directly edit and replace code in your active files'
                     : 'AI agent will explain in chat only without modifying files (e.g. asking caveats)',
@@ -1950,7 +1954,7 @@ function openInWindowHUD() {
             {
                 label: activeTTSEngine === 'none'
                     ? `$(mute) Change TTS Model (Current: NONE - Muted)`
-                    : `$(symbol-audio) Change TTS Model (Current: ${activeTTSModel.split('/').pop() || activeTTSModel})`,
+                    : `$(megaphone) Change TTS Model (Current: ${activeTTSModel.split('/').pop() || activeTTSModel})`,
                 description: activeTTSEngine === 'none'
                     ? 'Text-to-speech output is disabled. Spoken audio is silenced.'
                     : `Engine: ${activeTTSEngine.toUpperCase()} | Voice: ${activeTTSVoice}`,
@@ -2009,19 +2013,11 @@ function openInWindowHUD() {
         } else if (tooltip.includes('Cancel recording')) {
             cancelRecording();
             updateQuickPickRecordingUI(qp, false);
-        } else if (tooltip.includes('Add Active File')) {
-            const editor = vscode.window.activeTextEditor;
-            if (editor) {
-                const sel = editor.selection;
-                const text = editor.document.getText(sel);
-                const file = path.basename(editor.document.fileName);
-                const prefix = text
-                    ? `Regarding ${file}:${sel.start.line + 1}-${sel.end.line + 1}: "${text.slice(0, 60)}..." `
-                    : `In ${file}:${sel.start.line + 1}: `;
-                qp.value = prefix + (qp.value || '');
-            } else {
-                vscode.window.showInformationMessage('No active editor selection to add.');
-            }
+        } else if (tooltip.includes('AI Code Modifications') || tooltip.includes('File Modifications')) {
+            allowCodeEdits = !allowCodeEdits;
+            updateQuickPickRecordingUI(qp, state.isRecording || false);
+            if (menuVisible) qp.items = getMenuItems();
+            vscode.window.showInformationMessage(`InSitu Code Modifications: ${allowCodeEdits ? 'ENABLED (Direct Code Replacement)' : 'DISABLED (Read-Only / Explanations Only)'}`);
         } else if (tooltip.includes('Mode') || tooltip.includes('switch mode')) {
             menuVisible = !menuVisible;
             (qp as any).menuVisible = menuVisible;
