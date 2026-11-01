@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)](https://github.com/Brilliafy/insitu/releases)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg?style=for-the-badge)](https://github.com/Brilliafy/insitu/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Google Antigravity](https://img.shields.io/badge/Google%20Antigravity-Customized%20Native%20Pair-4285F4.svg?style=for-the-badge&logo=google&logoColor=white)](https://antigravity.google)
 [![CUDA GPU](https://img.shields.io/badge/CUDA-Hardware%20Accelerated-76B900.svg?style=for-the-badge&logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-zone)
