@@ -231,14 +231,24 @@ def save_config(cfg: Dict[str, Any]) -> None:
         print(f"Error saving config: {e}", file=sys.stderr)
 
 def get_dir_size(path: str) -> int:
+    """Calculates true disk size by resolving symlinks and tracking inodes to avoid double counting."""
     total = 0
+    seen_inodes = set()
     if os.path.isfile(path):
-        return os.path.getsize(path)
+        return os.path.getsize(os.path.realpath(path))
     for root, dirs, files in os.walk(path):
         for f in files:
             fp = os.path.join(root, f)
-            if not os.path.islink(fp) and os.path.exists(fp):
-                total += os.path.getsize(fp)
+            try:
+                real_fp = os.path.realpath(fp)
+                if os.path.exists(real_fp):
+                    st = os.stat(real_fp)
+                    key = (st.st_dev, st.st_ino)
+                    if key not in seen_inodes:
+                        seen_inodes.add(key)
+                        total += st.st_size
+            except OSError:
+                pass
     return total
 
 def get_model_disk_size(model_id: str, engine: str) -> Optional[int]:
@@ -279,7 +289,20 @@ def is_model_cached(model_id: str, engine: str) -> bool:
                 break
         clean_repo = repo_id.replace("/", "--")
         hf_path = os.path.join(MODELS_CACHE_DIR, f"models--{clean_repo}")
-        return os.path.exists(hf_path)
+        if not os.path.exists(hf_path):
+            return False
+        # Check that actual weight files (> 5 MB) are present
+        for root, dirs, files in os.walk(hf_path):
+            for f in files:
+                if f.endswith(".bin") or f.endswith(".safetensors") or f.endswith(".onnx"):
+                    fp = os.path.join(root, f)
+                    try:
+                        real_fp = os.path.realpath(fp)
+                        if os.path.exists(real_fp) and os.path.getsize(real_fp) > 5 * 1024 * 1024:
+                            return True
+                    except OSError:
+                        pass
+        return False
 
 def delete_model(model_id: str) -> Dict[str, Any]:
     """Deletes cached model files from disk to reclaim space."""

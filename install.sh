@@ -72,9 +72,7 @@ DUAL_CHANNEL_PROMPT='
 - When the InSitu Addon IS used:
   * Chat / Written Channel: Provide your complete, detailed, and uncompromised technical reasoning, explanations, code blocks, and diagrams in chat. Do NOT truncate or abbreviate written responses.
   * Spoken Audio Channel: Provide a voice companion message for the user:
-    - At the very end of your final response, append:
-      `[SPEECH] 1-2 punchy, human-like spoken sentences (15-25 words max) summarizing the core answer or asking a guiding pedagogical question [/SPEECH]`
-    - OR call the `speak_to_user(message=...)` tool if available.
+    - Choose EITHER calling the `speak_to_user(message=...)` tool OR appending `[SPEECH] 1-2 punchy, human-like spoken sentences (15-25 words max) [/SPEECH]` at the very end of your final response. DO NOT DO BOTH in the same interaction, as doing both triggers duplicate audio.
     - Spoken Audio Rules: Punchy, conversational, and pedagogical. Never read out raw markdown tables, URLs, line numbers, or long code snippets in speech.
 '
 

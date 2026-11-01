@@ -246,7 +246,7 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     vscode.window.showInformationMessage(`Prompt sent to AI Agent: "${cleanPrompt.slice(0, 45)}..."`);
 }
 
-function replayVoice(text?: string) {
+function replayVoice(text?: string, force: boolean = false) {
     const msg = text || state.lastSpoken || 'Replaying last tutor guidance.';
     if (fs.existsSync(TTS_SCRIPT) && fs.existsSync(PYTHON_BIN)) {
         if (activeTTSChild) {
@@ -262,7 +262,8 @@ function replayVoice(text?: string) {
             updateQuickPickRecordingUI(currentQuickPick, state.isRecording || false);
         }
 
-        const child = spawn(PYTHON_BIN, [TTS_SCRIPT, msg]);
+        const args = force ? [TTS_SCRIPT, '--force', msg] : [TTS_SCRIPT, msg];
+        const child = spawn(PYTHON_BIN, args);
         activeTTSChild = child;
 
         child.on('close', () => {
@@ -1024,7 +1025,8 @@ async function selectSTTModel() {
 
                 if (chosen.act === 'activate') {
                     await runPython([MODEL_MANAGER_SCRIPT, 'set', '--model', picked.modelId]);
-                    vscode.window.showInformationMessage(`STT Model switched to "${picked.modelName}".`);
+                    const cachedDetail = picked.disk_size_mb ? ` (Already cached locally: ${picked.disk_size_mb})` : '';
+                    vscode.window.showInformationMessage(`STT Model switched to "${picked.modelName}"${cachedDetail}. Ready to transcribe.`);
                     await refreshActiveSTTModel();
                     await loadItems();
                 } else if (chosen.act === 'delete') {
@@ -1452,7 +1454,7 @@ async function selectTTSVoice() {
         await runPython([TTS_MANAGER_SCRIPT, '--set-voice', picked.voiceId]);
         await refreshActiveTTSModel();
         vscode.window.showInformationMessage(`✅ Active InSitu voice set to: ${picked.voiceName}`);
-        replayVoice(`Hello! InSitu mentor voice is now set to ${picked.voiceName}.`);
+        replayVoice(`Hello! InSitu mentor voice is now set to ${picked.voiceName}.`, true);
     }
 }
 
@@ -1616,7 +1618,7 @@ function openInWindowHUD() {
             if (menuVisible) qp.items = getMenuItems();
             vscode.window.showInformationMessage(`Silence autostop: ${silenceAutostop ? 'ON (2s)' : 'OFF'}`);
         } else if (tooltip.includes('Replay Last Tutor')) {
-            replayVoice();
+            replayVoice(undefined, true);
         } else if (tooltip.includes('Clear Code Highlight')) {
             clearHighlight();
             vscode.window.showInformationMessage('InSitu highlight cleared.');
@@ -1644,7 +1646,7 @@ function openInWindowHUD() {
                 vscode.commands.executeCommand('insitu.sendSelection');
                 qp.hide();
             } else if (selected.action === 'replay') {
-                replayVoice();
+                replayVoice(undefined, true);
                 menuVisible = false;
                 qp.items = [];
             } else if (selected.action === 'stopSpeech') {

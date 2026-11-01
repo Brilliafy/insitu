@@ -31,10 +31,37 @@ np.load = _safe_np_load
 
 CONFIG_FILE = "/home/Aelfwif/insitu/tts_config.json"
 PID_FILE = "/tmp/insitu_tts.pid"
+DEDUP_FILE = "/tmp/insitu_last_spoken.json"
+DEDUP_WINDOW_SECONDS = 45.0
 BRIDGE_URL = "http://127.0.0.1:6419/speak_notify"
 PIPER_BIN = "/home/Aelfwif/anaconda3/envs/socratic-tutor/bin/piper"
 PIPER_MODELS_DIR = "/home/Aelfwif/insitu/server/models/piper"
 KOKORO_CACHE_DIR = os.path.expanduser("~/.cache/kokoro")
+
+def is_duplicate_speech(cleaned_text: str, force: bool = False) -> bool:
+    if force or not cleaned_text:
+        return False
+    if not os.path.exists(DEDUP_FILE):
+        return False
+    try:
+        with open(DEDUP_FILE, "r") as f:
+            data = json.load(f)
+        last_text = data.get("text", "").strip()
+        last_time = float(data.get("time", 0))
+        now = time.time()
+        if now - last_time < DEDUP_WINDOW_SECONDS:
+            if last_text and (last_text == cleaned_text or last_text in cleaned_text or cleaned_text in last_text):
+                return True
+    except Exception:
+        pass
+    return False
+
+def record_spoken_speech(cleaned_text: str):
+    try:
+        with open(DEDUP_FILE, "w") as f:
+            json.dump({"text": cleaned_text, "time": time.time()}, f)
+    except Exception:
+        pass
 
 def load_tts_config():
     if os.path.exists(CONFIG_FILE):
@@ -194,10 +221,16 @@ def speak_kokoro(cleaned_text: str, voice_id: str = "af_heart", speed: float = 1
     except Exception:
         pass
 
-def speak(message: str, blocking: bool = True):
+def speak(message: str, blocking: bool = True, force: bool = False):
     cleaned = extract_and_clean_speech(message)
     if not cleaned:
         return
+
+    if is_duplicate_speech(cleaned, force=force):
+        print(f"[InSitu TTS] Suppressing duplicate speech within {DEDUP_WINDOW_SECONDS}s: '{cleaned[:40]}...'", file=sys.stderr)
+        return
+
+    record_spoken_speech(cleaned)
 
     # Always stop any previous utterance before starting new one
     stop_speech()
@@ -229,10 +262,11 @@ def speak(message: str, blocking: bool = True):
         notify_bridge("", speaking=False)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Socratic TTS Player")
+    parser = argparse.ArgumentParser(description="InSitu TTS Player")
     parser.add_argument("text", nargs="*", default=[], help="Text or [SPEECH] block to synthesize")
     parser.add_argument("--stop", action="store_true", help="Stop playing speech immediately")
     parser.add_argument("--status", action="store_true", help="Check if speech is currently playing")
+    parser.add_argument("--force", action="store_true", help="Force speech output even if recently played")
 
     args = parser.parse_args()
 
@@ -244,8 +278,8 @@ if __name__ == "__main__":
         print(json.dumps({"speaking": speaking}))
     elif args.text:
         msg = " ".join(args.text)
-        speak(msg, blocking=True)
+        speak(msg, blocking=True, force=args.force)
     else:
         raw = sys.stdin.read()
         if raw.strip():
-            speak(raw.strip(), blocking=True)
+            speak(raw.strip(), blocking=True, force=args.force)
