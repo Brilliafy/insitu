@@ -188,14 +188,23 @@ def speak_piper(cleaned_text: str, model_name: str = "en_US-lessac-medium"):
         f.write(str(proc.pid))
     proc.wait()
 
+_WARM_KOKORO = None
+
+def get_kokoro_instance():
+    global _WARM_KOKORO
+    if _WARM_KOKORO is None:
+        from kokoro_onnx import Kokoro
+        from huggingface_hub import hf_hub_download
+        try:
+            model_path = hf_hub_download("onnx-community/Kokoro-82M-v1.0-ONNX", "onnx/model_quantized.onnx", local_files_only=True)
+        except Exception:
+            model_path = hf_hub_download("onnx-community/Kokoro-82M-v1.0-ONNX", "onnx/model_quantized.onnx")
+        voices_file = os.path.join(KOKORO_CACHE_DIR, "voices-v1.0.bin")
+        _WARM_KOKORO = Kokoro(model_path, voices_file)
+    return _WARM_KOKORO
+
 def speak_kokoro(cleaned_text: str, voice_id: str = "af_heart", speed: float = 1.0):
-    from kokoro_onnx import Kokoro
-    from huggingface_hub import hf_hub_download
-
-    model_path = hf_hub_download("onnx-community/Kokoro-82M-v1.0-ONNX", "onnx/model_quantized.onnx")
-    voices_file = os.path.join(KOKORO_CACHE_DIR, "voices-v1.0.bin")
-
-    kokoro = Kokoro(model_path, voices_file)
+    kokoro = get_kokoro_instance()
 
     # Determine language from voice prefix (af/am/bf/bm -> en-us / en-gb, jf/jm -> ja, zf/zm -> cmn)
     lang = "en-us"

@@ -366,7 +366,7 @@ function startTranscriptWatcher() {
         } catch (e) {
             console.error('[InSitu] Transcript watcher error:', e);
         }
-    }, 2000);
+    }, 500);
 }
 
 function stopTranscriptWatcher() {

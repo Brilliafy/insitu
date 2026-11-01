@@ -21,7 +21,11 @@ import shutil
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
-# Path constants
+import tts_player
+import threading
+
+# Pre-warm Kokoro TTS model in background so audio generation is near-instant (<300ms)
+threading.Thread(target=tts_player.get_kokoro_instance, daemon=True).start()
 SERVER_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SERVER_DIR))
 PIPER_MODEL = SERVER_DIR / "models" / "piper" / "en_US-lessac-medium.onnx"
@@ -84,18 +88,8 @@ async def speak_to_user(message: str) -> str:
     - Pose a focused question prompting the user on how to proceed, what invariants exist, or why an approach was chosen.
     - You may also use [SPEECH] spoken question [/SPEECH] tags inside your message."""
     try:
-        # Record deduplication token to prevent transcript watcher from repeating
-        try:
-            import time
-            token_file = "/tmp/insitu_mcp_spoken.json"
-            with open(token_file, "w") as f:
-                json.dump({"text": message.strip(), "time": time.time()}, f)
-        except Exception:
-            pass
-
-        import threading
-        proc = subprocess.Popen([PYTHON_BIN, str(TTS_PLAYER), message], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        threading.Thread(target=proc.wait, daemon=True).start()
+        # Launch directly in background thread with warm in-memory model for sub-second delivery
+        threading.Thread(target=tts_player.speak, args=(message,), kwargs={"blocking": True}, daemon=True).start()
         return "Spoken message dispatched via InSitu TTS."
     except Exception as e:
         return f"Failed to speak message: {str(e)}"
@@ -104,7 +98,7 @@ async def speak_to_user(message: str) -> str:
 async def stop_speech() -> str:
     """Instantly silences and stops any currently active spoken audio."""
     try:
-        subprocess.run([PYTHON_BIN, str(TTS_PLAYER), "--stop"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        tts_player.stop_speech()
         return "Spoken audio stopped and silenced."
     except Exception as e:
         return f"Failed to stop speech: {str(e)}"
