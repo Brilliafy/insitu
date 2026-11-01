@@ -269,6 +269,7 @@ function applyHighlight(editor: vscode.TextEditor, range: vscode.Range, metadata
 
 let lastVoicePromptTime = 0;
 let injectSocraticGuidance = true;
+let allowCodeEdits = true;
 let autoSpeakResponses = true;
 let lastCheckedMtime = Date.now();
 let lastProcessedStepByFile = new Map<string, number>();
@@ -311,7 +312,14 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     }
 
     let modeDirective = '';
-    if (currentMode === 1) {
+    if (!allowCodeEdits) {
+        // Read-only / Explanations only mode
+        modeDirective = `[InSitu Mentor Mode ${currentMode}: ${state.modeName} - READ-ONLY / EXPLANATIONS ONLY]
+Action Directives (MANDATORY - ZERO CODE MODIFICATIONS):
+1. Voice First: Call \`speak_to_user(message=...)\` via MCP to speak 1-2 punchy spoken sentences (15-25 words max) directly answering the question or caveats out loud. Do NOT write [SPEECH] tags in chat.
+2. Read-Only Mode (STRICT): Do NOT modify, replace, or edit any workspace files or code buffers. Do NOT use file editing tools (such as edit_file or write_file).
+3. Chat Explanation & Analysis: Provide your complete explanation, potential caveats, architectural analysis, and answers exclusively in chat below.`;
+    } else if (currentMode === 1) {
         // Mode 1: Section Scaffold
         if (hasSelectedCode) {
             modeDirective = `[InSitu Mentor Mode 1: Section Scaffold - DIRECT CODE REPLACEMENT MANDATORY]
@@ -397,6 +405,11 @@ Dual-Channel Voice Protocol (MANDATORY): You MUST FIRST call the \`speak_to_user
 }
 
 async function replayVoice(text?: string, force: boolean = false) {
+    if (activeTTSEngine === 'none') {
+        vscode.window.showInformationMessage('TTS is currently disabled (None / Mute). Spoken audio is silenced.');
+        return;
+    }
+
     const msg = text || state.lastSpoken || 'Replaying last tutor guidance.';
     if (!msg || !msg.trim()) return;
 
@@ -1656,6 +1669,14 @@ async function selectTTSModel() {
         }
 
         if (picked.modelId) {
+            if (picked.modelId === 'none') {
+                await runPython([TTS_MANAGER_SCRIPT, '--set-model', 'none']);
+                await refreshActiveTTSModel();
+                vscode.window.showInformationMessage('🔇 InSitu TTS disabled (Silent Mode).');
+                await loadItems();
+                return;
+            }
+
             if (picked.isCached) {
                 const actions: (vscode.QuickPickItem & { act: string })[] = [
                     { label: '$(check) Activate & Choose Voice...', description: `Set as active model and pick voice preset`, act: 'activateAndPickVoice' },
@@ -1722,6 +1743,11 @@ async function selectTTSModel() {
 }
 
 async function selectTTSVoice() {
+    if (activeTTSEngine === 'none') {
+        vscode.window.showInformationMessage('TTS is currently disabled (None / Mute). Please select an active TTS model first.');
+        return;
+    }
+
     let voices: any[] = [];
     try {
         const out = await runPython([TTS_MANAGER_SCRIPT, '--list-voices']);
@@ -1827,6 +1853,13 @@ function openInWindowHUD() {
                 mode: 3
             },
             {
+                label: `$(edit) AI File Modifications: ${allowCodeEdits ? 'ENABLED (Direct Code Replacement)' : 'DISABLED (Read-Only / Explanations Only)'}`,
+                description: allowCodeEdits
+                    ? 'AI agent will directly edit and replace code in your active files'
+                    : 'AI agent will explain in chat only without modifying files (e.g. asking caveats)',
+                action: 'toggleCodeEdits'
+            },
+            {
                 label: '$(search) Inspect Selection & Ask Doubt',
                 description: 'Sends active selection in editor as Mode 3 prompt',
                 action: 'inspect'
@@ -1857,13 +1890,19 @@ function openInWindowHUD() {
                 action: 'changeSTT'
             },
             {
-                label: `$(symbol-audio) Change TTS Model (Current: ${activeTTSModel.split('/').pop() || activeTTSModel})`,
-                description: `Engine: ${activeTTSEngine.toUpperCase()} | Voice: ${activeTTSVoice}`,
+                label: activeTTSEngine === 'none'
+                    ? `$(mute) Change TTS Model (Current: NONE - Muted)`
+                    : `$(symbol-audio) Change TTS Model (Current: ${activeTTSModel.split('/').pop() || activeTTSModel})`,
+                description: activeTTSEngine === 'none'
+                    ? 'Text-to-speech output is disabled. Spoken audio is silenced.'
+                    : `Engine: ${activeTTSEngine.toUpperCase()} | Voice: ${activeTTSVoice}`,
                 action: 'changeTTS'
             },
             {
-                label: `$(unmute) Select Preset Voice (${activeTTSVoice})`,
-                description: 'Pick from 26 Edge Neural voices, 6 Piper voices, or 54 Kokoro voices',
+                label: `$(unmute) Select Preset Voice (${activeTTSEngine === 'none' ? 'Muted' : activeTTSVoice})`,
+                description: activeTTSEngine === 'none'
+                    ? 'TTS is disabled (None). Select a TTS model to enable voice output.'
+                    : 'Pick from 26 Edge Neural voices, 6 Piper voices, or 54 Kokoro voices',
                 action: 'selectVoice'
             },
             {
@@ -1986,6 +2025,10 @@ function openInWindowHUD() {
                 qp.items = getMenuItems();
                 updateQuickPickRecordingUI(qp, state.isRecording || false);
                 vscode.window.showInformationMessage(`Silence autostop: ${silenceAutostop ? 'ON (2s)' : 'OFF'}`);
+            } else if (selected.action === 'toggleCodeEdits') {
+                allowCodeEdits = !allowCodeEdits;
+                qp.items = getMenuItems();
+                vscode.window.showInformationMessage(`InSitu Code Modifications: ${allowCodeEdits ? 'ENABLED (Direct Code Replacement)' : 'DISABLED (Read-Only / Explanations Only)'}`);
             } else if (selected.action === 'toggleDevice') {
                 toggleHardwareAcceleration();
             } else if (selected.action === 'changeSTT') {
@@ -2110,6 +2153,13 @@ export function activate(context: vscode.ExtensionContext) {
 
     registerDual('openHUD', () => openInWindowHUD());
     registerDual('selectSTTModel', () => selectSTTModel());
+    registerDual('toggleCodeEdits', () => {
+        allowCodeEdits = !allowCodeEdits;
+        vscode.window.showInformationMessage(`InSitu Code Modifications: ${allowCodeEdits ? 'ENABLED (Direct Code Replacement)' : 'DISABLED (Read-Only / Explanations Only)'}`);
+        if (currentQuickPick && (currentQuickPick as any).refreshMenu) {
+            (currentQuickPick as any).refreshMenu();
+        }
+    });
     registerDual('toggleDevice', () => toggleHardwareAcceleration());
     registerDual('selectTTSModel', () => selectTTSModel());
     registerDual('selectTTSVoice', () => selectTTSVoice());
@@ -2267,6 +2317,39 @@ export function activate(context: vscode.ExtensionContext) {
                         updateMode(mode);
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ status: 'ok', mode: currentMode }));
+                    } catch (e: any) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ status: 'error', error: e.message }));
+                    }
+                });
+                return;
+            }
+        }
+
+        // Endpoint: /code_edits
+        if (req.url === '/code_edits') {
+            if (req.method === 'GET') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ allowCodeEdits }));
+                return;
+            }
+            if (req.method === 'POST') {
+                let body = '';
+                req.on('data', chunk => body += chunk);
+                req.on('end', () => {
+                    try {
+                        const data = JSON.parse(body);
+                        if (typeof data.allow === 'boolean') {
+                            allowCodeEdits = data.allow;
+                        } else {
+                            allowCodeEdits = !allowCodeEdits;
+                        }
+                        if (currentQuickPick && (currentQuickPick as any).refreshMenu) {
+                            (currentQuickPick as any).refreshMenu();
+                        }
+                        vscode.window.showInformationMessage(`InSitu Code Modifications: ${allowCodeEdits ? 'ENABLED (Direct Code Replacement)' : 'DISABLED (Read-Only / Explanations Only)'}`);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ status: 'ok', allowCodeEdits }));
                     } catch (e: any) {
                         res.writeHead(400, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ status: 'error', error: e.message }));

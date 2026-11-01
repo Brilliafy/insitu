@@ -2,7 +2,8 @@
   "name": "insitu",
   "displayName": "InSitu: In-Editor Voice & Socratic AI Mentor",
   "description": "In-Window Topmost HUD Overlay with Low-Latency STT/TTS Voice Dictation, Visual In-Editor Navigation, and Dual-Channel AI Mentorship",
-  "version": "0.3.9",
+  "version": "1.0.0",
+  "icon": "icon.png",
   "publisher": "brilliafy",
   "repository": {
     "type": "git",
@@ -190,6 +191,12 @@
         "category": "InSitu"
       },
       {
+        "command": "insitu.toggleCodeEdits",
+        "title": "InSitu: Toggle AI Code Modifications (Read-Only vs Edit)",
+        "icon": "$(edit)",
+        "category": "InSitu"
+      },
+      {
         "command": "socraticMentor.openHUD",
         "title": "Socratic Tutor: Open In-Window Overlay & Voice HUD (Legacy Alias)",
         "category": "InSitu (Legacy)"
@@ -212,6 +219,11 @@
       {
         "command": "socraticMentor.sendSelection",
         "title": "Tutor (Legacy Alias)",
+        "category": "InSitu (Legacy)"
+      },
+      {
+        "command": "socraticMentor.toggleCodeEdits",
+        "title": "Socratic Tutor: Toggle AI Code Modifications (Legacy Alias)",
         "category": "InSitu (Legacy)"
       }
     ],

@@ -24,6 +24,18 @@ PIPER_MODELS_DIR = "/home/Aelfwif/insitu/server/models/piper"
 
 PRESET_MODELS = [
     {
+        "id": "none",
+        "name": "None (TTS Disabled / Silent Mode)",
+        "tier": "Tier 0: Cloud & Silent",
+        "engine": "none",
+        "repo_id": "none",
+        "params": "0M",
+        "ram": "0 MB",
+        "type": "preset",
+        "recommended_for_weak_pc": True,
+        "description": "Completely disables voice synthesis and spoken audio. speak_to_user MCP call will cleanly do nothing."
+    },
+    {
         "id": "microsoft/edge-tts",
         "name": "Edge Neural TTS (Microsoft)",
         "tier": "Tier 0: Cloud Neural (Free / Human Studio Quality)",
@@ -237,7 +249,7 @@ def save_config(cfg: Dict[str, Any]) -> None:
         print(f"Error saving config: {e}", file=sys.stderr)
 
 def is_model_cached(model_id: str) -> bool:
-    if model_id == "microsoft/edge-tts":
+    if model_id == "none" or model_id == "microsoft/edge-tts":
         return True
     elif model_id == "hexgrad/Kokoro-82M":
         voices_bin = os.path.join(KOKORO_CACHE_DIR, "voices-v1.0.bin")
@@ -253,6 +265,8 @@ def is_model_cached(model_id: str) -> bool:
         return os.path.exists(hf_dir)
 
 def delete_model(model_id: str) -> Dict[str, Any]:
+    if model_id == "none" or model_id == "microsoft/edge-tts":
+        return {"status": "ok", "model_id": model_id, "freed_mb": 0, "deleted_paths": []}
     import shutil
     freed = 0
     deleted_paths = []
@@ -305,6 +319,8 @@ def delete_model(model_id: str) -> Dict[str, Any]:
     return {"status": "ok", "model_id": model_id, "freed_mb": mb, "deleted_paths": deleted_paths}
 
 def download_model(model_id: str) -> bool:
+    if model_id == "none":
+        return True
     print(f"PROGRESS: {{\"status\": \"starting\", \"percent\": 5, \"message\": \"Connecting to Hugging Face for {model_id}...\"}}", flush=True)
 
     if model_id == "hexgrad/Kokoro-82M":
@@ -352,7 +368,9 @@ def list_voices_json() -> str:
     engine = cfg.get("engine", "edge-tts")
     current_voice = cfg.get("voice_id", "en-US-GuyNeural")
 
-    if engine == "edge-tts":
+    if engine == "none":
+        voices = [{"id": "none", "name": "Silent (No Speech Output)", "accent": "None", "gender": "None", "quality": "🔇"}]
+    elif engine == "edge-tts":
         voices = EDGE_VOICES
     elif engine == "kokoro":
         voices = KOKORO_VOICES
@@ -394,7 +412,9 @@ if __name__ == "__main__":
         cfg["model_id"] = args.set_model
         cfg["engine"] = engine
         # Reset default voice
-        if engine == "edge-tts":
+        if engine == "none":
+            cfg["voice_id"] = "none"
+        elif engine == "edge-tts":
             cfg["voice_id"] = "en-US-GuyNeural"
         elif engine == "kokoro":
             cfg["voice_id"] = "af_heart"

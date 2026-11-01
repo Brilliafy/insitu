@@ -343,6 +343,9 @@ def speak(message: str, blocking: bool = True, force: bool = False):
 
     cfg = load_tts_config()
     engine = cfg.get("engine", "edge-tts")
+    if engine == "none":
+        return
+
     voice_id = cfg.get("voice_id", "en-US-GuyNeural")
     speed = float(cfg.get("speed", 1.05))
 

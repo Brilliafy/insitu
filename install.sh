@@ -45,10 +45,11 @@ if command -v npm &>/dev/null; then
     npm run compile --silent || npm run compile
 fi
 
-VSIX_FILE="$SCRIPT_DIR/extension/insitu-0.3.0.vsix"
-if [ ! -f "$VSIX_FILE" ]; then
+VSIX_FILE=$(ls -t "$SCRIPT_DIR/extension"/insitu-*.vsix 2>/dev/null | head -n 1)
+if [ -z "$VSIX_FILE" ] || [ ! -f "$VSIX_FILE" ]; then
     echo -e "${YELLOW}Packaging VSIX...${NC}"
     npx @vscode/vsce package --no-dependencies --allow-missing-repository --allow-star-activation
+    VSIX_FILE=$(ls -t "$SCRIPT_DIR/extension"/insitu-*.vsix 2>/dev/null | head -n 1)
 fi
 
 if command -v code &>/dev/null; then

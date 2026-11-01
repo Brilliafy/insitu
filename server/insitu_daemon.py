@@ -212,6 +212,8 @@ class InSituRuntime:
 
         cfg = tts_player.load_tts_config()
         selected_engine = engine or cfg.get("engine", "edge-tts")
+        if selected_engine == "none":
+            return True
         selected_voice = voice_id or cfg.get("voice_id", "en-US-GuyNeural")
         speed = float(cfg.get("speed", 1.05))
 

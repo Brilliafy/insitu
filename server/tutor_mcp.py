@@ -87,11 +87,14 @@ async def speak_to_user(message: str) -> str:
     - Never read aloud raw syntax or multiline code blocks.
     - Directly answer the core question or pose a focused guiding question."""
     try:
+        cfg = tts_player.load_tts_config()
+        engine = cfg.get("engine", "edge-tts")
+        if engine == "none":
+            return "TTS is disabled (None). Audio is silenced."
+
+        voice_id = cfg.get("voice_id", "en-US-GuyNeural")
         # 1. Fast path: Forward to InSitu warm daemon (sub-50ms dispatch)
         try:
-            cfg = tts_player.load_tts_config()
-            engine = cfg.get("engine", "edge-tts")
-            voice_id = cfg.get("voice_id", "en-US-GuyNeural")
             req = urllib.request.Request(
                 "http://127.0.0.1:6422/speak",
                 data=json.dumps({
@@ -228,6 +231,23 @@ async def set_code_prompt_prefix(prefix: str) -> str:
     cfg["prompt_prefix"] = prefix
     save_config(cfg)
     return f"Coding vocabulary prompt prefix updated to:\n{prefix}"
+
+@mcp.tool()
+async def get_code_edits_mode() -> str:
+    """Checks whether AI file modifications are currently ENABLED (Direct File Replacement) or DISABLED (Read-Only / Explanations Only)."""
+    res = query_bridge("/code_edits")
+    allow = res.get("allowCodeEdits", True)
+    if allow:
+        return "AI Code Modifications: ENABLED. The mentor should directly edit and replace sections in the active file using editing tools."
+    else:
+        return "AI Code Modifications: DISABLED (Read-Only). The mentor MUST NOT edit or write to any files. Provide explanations and caveat analysis in chat only."
+
+@mcp.tool()
+async def set_code_edits_mode(allow: bool) -> str:
+    """Toggles whether the AI mentor directly modifies files (True) or operates in read-only explanation mode (False)."""
+    res = query_bridge("/code_edits", {"allow": allow}, method="POST")
+    state_str = "ENABLED" if res.get("allowCodeEdits", allow) else "DISABLED (Read-Only)"
+    return f"AI Code Modifications updated to: {state_str} in InSitu IDE HUD."
 
 if __name__ == "__main__":
     mcp.run()
