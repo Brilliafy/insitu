@@ -24,28 +24,28 @@ PIPER_MODELS_DIR = "/home/Aelfwif/insitu/server/models/piper"
 
 PRESET_MODELS = [
     {
-        "id": "hexgrad/Kokoro-82M",
-        "name": "Kokoro 82M (hexgrad)",
-        "tier": "Tier 1: Ultra-Lightweight (Low CPU / Raspberry Pi)",
-        "engine": "kokoro",
-        "repo_id": "onnx-community/Kokoro-82M-v1.0-ONNX",
-        "params": "82M",
-        "ram": "< 100 MB",
-        "type": "preset",
-        "recommended_for_weak_pc": True,
-        "description": "Gold standard for lightweight TTS. 54 high-quality voices (US/UK/JA/ZH), near-commercial naturalness on pure CPU."
-    },
-    {
         "id": "rhasspy/piper-voices",
         "name": "Piper Voices (rhasspy)",
-        "tier": "Tier 1: Ultra-Lightweight (Low CPU / Raspberry Pi)",
+        "tier": "Tier 1: Ultra-Lightweight (Instant Latency / Ultra-Fast)",
         "engine": "piper",
         "repo_id": "rhasspy/piper-voices",
         "params": "15M-60M",
         "ram": "< 50 MB",
         "type": "preset",
         "recommended_for_weak_pc": True,
-        "description": "Ultra-low latency (<20ms), instant offline speech, 100+ voices across 30+ languages."
+        "description": "Ultra-low latency (<250ms), instant offline speech, 100+ voices across 30+ languages."
+    },
+    {
+        "id": "hexgrad/Kokoro-82M",
+        "name": "Kokoro 82M (hexgrad)",
+        "tier": "Tier 1: Ultra-Lightweight (High-Quality Expressive)",
+        "engine": "kokoro",
+        "repo_id": "onnx-community/Kokoro-82M-v1.0-ONNX",
+        "params": "82M",
+        "ram": "< 100 MB",
+        "type": "preset",
+        "recommended_for_weak_pc": True,
+        "description": "Gold standard for expressiveness. 54 high-quality voices (US/UK/JA/ZH)."
     },
     {
         "id": "mush42/mms-tts",
@@ -174,10 +174,10 @@ def load_config() -> Dict[str, Any]:
         except Exception:
             pass
     return {
-        "model_id": "hexgrad/Kokoro-82M",
-        "engine": "kokoro",
-        "voice_id": "af_heart",
-        "speed": 1.0,
+        "model_id": "rhasspy/piper-voices",
+        "engine": "piper",
+        "voice_id": "en_US-lessac-medium",
+        "speed": 1.05,
         "reference_audio": None
     }
 

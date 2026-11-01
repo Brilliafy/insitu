@@ -15,6 +15,7 @@ import signal
 import threading
 import subprocess
 import argparse
+import wave
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import numpy as np
 
@@ -63,6 +64,13 @@ class InSituRuntime:
         self.last_transcript = ""
         self.active_tts_proc = None
         self.lock = threading.Lock()
+
+    def is_speaking(self) -> bool:
+        if self.active_tts_proc:
+            if self.active_tts_proc.poll() is None:
+                return True
+            self.active_tts_proc = None
+        return tts_player.is_speech_playing()
 
     def get_cuda_vram_mb(self) -> int:
         try:
@@ -208,8 +216,8 @@ class InSituRuntime:
             return False
 
         cfg = tts_player.load_tts_config()
-        selected_engine = engine or cfg.get("engine", "kokoro")
-        selected_voice = voice_id or cfg.get("voice_id", "af_heart")
+        selected_engine = engine or cfg.get("engine", "piper")
+        selected_voice = voice_id or cfg.get("voice_id", "en_US-lessac-medium")
         speed = float(cfg.get("speed", 1.05))
 
         print(f"[InSitu Daemon] Speaking ({selected_engine} - {selected_voice}): '{cleaned[:50]}...'")
@@ -218,18 +226,23 @@ class InSituRuntime:
         if selected_engine == "piper" and self.piper_voice:
             try:
                 t0 = time.time()
-                player_cmd = "pw-play --raw --rate 22050 --channels 1 --format s16 -" if tts_player.shutil.which("pw-play") else "aplay -q -r 22050 -f S16_LE -c 1 -"
-                proc = subprocess.Popen(player_cmd, shell=True, stdin=subprocess.PIPE, preexec_fn=os.setsid)
-                self.active_tts_proc = proc
+                wav_file = "/tmp/insitu_speech.wav"
+                with wave.open(wav_file, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(22050)
+                    for chunk in self.piper_voice.synthesize(cleaned):
+                        wf.writeframes(chunk.audio_int16_bytes)
 
-                with open(tts_player.PID_FILE, "w") as f:
-                    f.write(str(proc.pid))
-
-                for chunk in self.piper_voice.synthesize(cleaned):
-                    pcm = (chunk.audio_float_array * 32767).astype(np.int16).tobytes()
-                    proc.stdin.write(pcm)
-                proc.stdin.close()
-                print(f"[InSitu Daemon] Piper synthesis started in {(time.time() - t0)*1000:.1f}ms")
+                synth_ms = (time.time() - t0) * 1000
+                player_bin = tts_player.shutil.which("pw-play") or tts_player.shutil.which("aplay")
+                if player_bin:
+                    player_cmd = [player_bin, wav_file] if "pw-play" in player_bin else [player_bin, "-q", wav_file]
+                    proc = subprocess.Popen(player_cmd, preexec_fn=os.setsid)
+                    self.active_tts_proc = proc
+                    with open(tts_player.PID_FILE, "w") as f:
+                        f.write(str(proc.pid))
+                print(f"[InSitu Daemon] Piper synthesized in {synth_ms:.1f}ms! Playback started.")
                 return True
             except Exception as e:
                 print(f"[InSitu Daemon] Piper direct stream error: {e}", file=sys.stderr)
@@ -263,7 +276,8 @@ class DaemonHandler(BaseHTTPRequestHandler):
                 "gpu_vram_mb": vram,
                 "stt_warm": runtime.whisper_model is not None,
                 "tts_warm": runtime.kokoro is not None or runtime.piper_voice is not None,
-                "is_recording": runtime.is_recording
+                "is_recording": runtime.is_recording,
+                "is_speaking": runtime.is_speaking()
             }
             self.send_json(data)
         else:

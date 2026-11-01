@@ -245,9 +245,9 @@ def speak(message: str, blocking: bool = True, force: bool = False):
     stop_speech()
 
     cfg = load_tts_config()
-    engine = cfg.get("engine", "kokoro")
-    voice_id = cfg.get("voice_id", "af_heart")
-    speed = float(cfg.get("speed", 1.0))
+    engine = cfg.get("engine", "piper")
+    voice_id = cfg.get("voice_id", "en_US-lessac-medium")
+    speed = float(cfg.get("speed", 1.05))
 
     notify_bridge(cleaned, speaking=True)
 

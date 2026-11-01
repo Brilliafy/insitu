@@ -95,11 +95,11 @@ async function ensureDaemonRunning() {
 
 let highlightDecoration: vscode.TextEditorDecorationType;
 let currentMode = 1;
-let activeSTTModel = 'moonshine/tiny';
-let activeSTTDevice = 'cpu';
-let activeTTSModel = 'hexgrad/Kokoro-82M';
-let activeTTSVoice = 'af_heart';
-let activeTTSEngine = 'kokoro';
+let activeSTTModel = 'Systran/faster-distil-whisper-small.en';
+let activeSTTDevice = 'cuda';
+let activeTTSModel = 'rhasspy/piper-voices';
+let activeTTSVoice = 'en_US-lessac-medium';
+let activeTTSEngine = 'piper';
 let activeTTSChild: ChildProcess | undefined = undefined;
 let statusBarItem: vscode.StatusBarItem;
 let tutorProvider: SocraticTutorViewProvider;
@@ -179,9 +179,9 @@ async function refreshActiveTTSModel() {
     try {
         const out = await runPython([TTS_MANAGER_SCRIPT, '--status']);
         const cfg = JSON.parse(out);
-        activeTTSModel = cfg.model_id || 'hexgrad/Kokoro-82M';
-        activeTTSVoice = cfg.voice_id || 'af_heart';
-        activeTTSEngine = cfg.engine || 'kokoro';
+        activeTTSModel = cfg.model_id || 'rhasspy/piper-voices';
+        activeTTSVoice = cfg.voice_id || 'en_US-lessac-medium';
+        activeTTSEngine = cfg.engine || 'piper';
         if (currentQuickPick) {
             updateQuickPickRecordingUI(currentQuickPick, state.isRecording || false);
         }
@@ -346,6 +346,37 @@ async function replayVoice(text?: string, force: boolean = false) {
                 engine: activeTTSEngine,
                 voice_id: activeTTSVoice
             }, 'POST', 15000);
+
+            // Poll daemon status until playback finishes to reset speaking state
+            const wordCount = msg.split(/\s+/).length;
+            const estimatedDurMs = Math.max(2000, Math.min(25000, Math.round((wordCount / 2.6) * 1000)));
+            const pollInterval = setInterval(async () => {
+                try {
+                    const st = await queryDaemon('/status', undefined, 'GET', 400);
+                    if (!st || !st.is_speaking) {
+                        clearInterval(pollInterval);
+                        state.isSpeaking = false;
+                        notifySpeakingStatus(false);
+                        if (currentQuickPick) {
+                            updateQuickPickRecordingUI(currentQuickPick, state.isRecording || false);
+                        }
+                    }
+                } catch {
+                    clearInterval(pollInterval);
+                    state.isSpeaking = false;
+                    notifySpeakingStatus(false);
+                }
+            }, 300);
+
+            // Fallback safety timeout
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                if (state.isSpeaking) {
+                    state.isSpeaking = false;
+                    notifySpeakingStatus(false);
+                }
+            }, estimatedDurMs + 1500);
+
             return;
         }
     } catch (e) {
@@ -476,10 +507,22 @@ function stopTranscriptWatcher() {
     }
 }
 
-function checkLatestTranscript() {
-    if (!autoSpeakResponses) return;
-    if (state.isSpeaking) return;
+let cachedLatestTranscriptFile: string | null = null;
+let lastFullBrainScanTime = 0;
 
+function findLatestTranscriptFile(): { file: string; mtime: number } | null {
+    const now = Date.now();
+    // Fast path: Check cached file first if recently active
+    if (cachedLatestTranscriptFile) {
+        try {
+            const stat = fs.statSync(cachedLatestTranscriptFile);
+            if (now - stat.mtimeMs < 120000 && now - lastFullBrainScanTime < 4000) {
+                return { file: cachedLatestTranscriptFile, mtime: stat.mtimeMs };
+            }
+        } catch {}
+    }
+
+    lastFullBrainScanTime = now;
     const baseDirs = [
         path.join(os.homedir(), '.gemini', 'antigravity', 'brain'),
         path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain')
@@ -506,7 +549,24 @@ function checkLatestTranscript() {
         } catch {}
     }
 
-    if (!latestFile || maxMtime <= lastCheckedMtime) return;
+    if (latestFile) {
+        cachedLatestTranscriptFile = latestFile;
+        return { file: latestFile, mtime: maxMtime };
+    }
+    return null;
+}
+
+function checkLatestTranscript() {
+    if (!autoSpeakResponses) return;
+    if (state.isSpeaking) return;
+
+    const latest = findLatestTranscriptFile();
+    if (!latest) return;
+
+    const latestFile = latest.file;
+    const maxMtime = latest.mtime;
+
+    if (maxMtime <= lastCheckedMtime) return;
     lastCheckedMtime = maxMtime;
 
     const now = Date.now();

@@ -24,8 +24,8 @@ from mcp.server.fastmcp import FastMCP
 import tts_player
 import threading
 
-# Pre-warm Kokoro TTS model in background so audio generation is near-instant (<300ms)
-threading.Thread(target=tts_player.get_kokoro_instance, daemon=True).start()
+# Pre-warm fast Piper TTS model in background
+threading.Thread(target=tts_player.load_tts_config, daemon=True).start()
 SERVER_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SERVER_DIR))
 PIPER_MODEL = SERVER_DIR / "models" / "piper" / "en_US-lessac-medium.onnx"
@@ -92,7 +92,11 @@ async def speak_to_user(message: str) -> str:
         try:
             req = urllib.request.Request(
                 "http://127.0.0.1:6422/speak",
-                data=json.dumps({"text": message}).encode("utf-8"),
+                data=json.dumps({
+                    "text": message,
+                    "engine": "piper",
+                    "voice_id": "en_US-lessac-medium"
+                }).encode("utf-8"),
                 headers={"Content-Type": "application/json"}
             )
             with urllib.request.urlopen(req, timeout=0.8):
