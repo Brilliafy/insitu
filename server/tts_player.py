@@ -117,7 +117,52 @@ def extract_and_clean_speech(text: str) -> str:
     text = re.sub(r'^(Created At|Completed At|Showing lines|Total lines):.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
     text = re.sub(r'\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\s]*', '', text)
 
-    # 8. Normalize whitespace
+    # 8. Phonetic & Pronunciation overrides for programming and creator jargon
+    PHONETIC_OVERRIDES = [
+        (r'\bbrackeys\b', 'brack-ees'),
+        (r'\bBrackeys\b', 'Brack-ees'),
+        (r'\bgithub\b', 'git-hub'),
+        (r'\bGitHub\b', 'Git-Hub'),
+        (r'\bvscode\b', 'V-S-Code'),
+        (r'\bVS Code\b', 'V-S-Code'),
+        (r'\bvsix\b', 'V-six'),
+        (r'\bVSIX\b', 'V-six'),
+        (r'\basync\b', 'ay-sink'),
+        (r'\bawait\b', 'uh-wait'),
+        (r'\bstdout\b', 'standard out'),
+        (r'\bstderr\b', 'standard error'),
+        (r'\bstdin\b', 'standard in'),
+        (r'\bmcp\b', 'M-C-P'),
+        (r'\bMCP\b', 'M-C-P'),
+        (r'\bstt\b', 'S-T-T'),
+        (r'\bSTT\b', 'S-T-T'),
+        (r'\btts\b', 'T-T-S'),
+        (r'\bTTS\b', 'T-T-S'),
+        (r'\bidx\b', 'index'),
+        (r'\bpwd\b', 'P-W-D'),
+        (r'\bcuda\b', 'coo-da'),
+        (r'\bCUDA\b', 'Coo-da'),
+        (r'\bvram\b', 'V-RAM'),
+        (r'\bVRAM\b', 'V-RAM'),
+        (r'\bjsonl\b', 'JSON lines'),
+        (r'\bJSONL\b', 'JSON lines'),
+        (r'\bapi\b', 'A-P-I'),
+        (r'\bAPI\b', 'A-P-I'),
+        (r'\bapis\b', 'A-P-Eyes'),
+        (r'\bAPIs\b', 'A-P-Eyes'),
+        (r'\bgpu\b', 'G-P-U'),
+        (r'\bGPU\b', 'G-P-U'),
+        (r'\bcpu\b', 'C-P-U'),
+        (r'\bCPU\b', 'C-P-U'),
+        (r'\bui\b', 'U-I'),
+        (r'\bUI\b', 'U-I'),
+        (r'\bcli\b', 'C-L-I'),
+        (r'\bCLI\b', 'C-L-I'),
+    ]
+    for pattern, repl in PHONETIC_OVERRIDES:
+        text = re.sub(pattern, repl, text)
+
+    # 9. Normalize whitespace
     cleaned = re.sub(r'\s+', ' ', text).strip()
     return cleaned
 

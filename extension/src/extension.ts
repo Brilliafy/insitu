@@ -445,6 +445,7 @@ function notifySpeakingStatus(isSpeaking: boolean) {
 }
 
 const spokenStepKeys = new Set<string>();
+const spokenSpeechTexts = new Set<string>();
 
 function initTranscriptWatcherBaseline() {
     const baseDirs = [
@@ -579,8 +580,8 @@ function checkLatestTranscript() {
         const stat = fs.statSync(latestFile);
         if (stat.size === 0) return;
 
-        // Tail read (last 16KB)
-        const readSize = Math.min(stat.size, 16384);
+        // Tail read (last 64KB to capture full response turns)
+        const readSize = Math.min(stat.size, 65536);
         const buffer = Buffer.alloc(readSize);
         const fd = fs.openSync(latestFile, 'r');
         fs.readSync(fd, buffer, 0, readSize, stat.size - readSize);
@@ -591,7 +592,7 @@ function checkLatestTranscript() {
         const validLines = readSize < stat.size ? lines.slice(1) : lines;
 
         let maxSeenStep = lastStep;
-        let candidateResponse: { step: number; content: string } | null = null;
+        let candidateResponse: { step: number; speechText: string } | null = null;
 
         for (let i = validLines.length - 1; i >= 0; i--) {
             const line = validLines[i].trim();
@@ -607,11 +608,20 @@ function checkLatestTranscript() {
                     break;
                 }
 
-                if (item.source === 'MODEL' && item.type === 'PLANNER_RESPONSE' && item.status === 'DONE') {
-                    const stepKey = `${latestFile}:${stepIndex}`;
-                    if (!spokenStepKeys.has(stepKey)) {
-                        candidateResponse = { step: stepIndex, content: item.content || '' };
-                        break;
+                // Match ANY model message as soon as a complete [SPEECH] ... [/SPEECH] pair exists!
+                // We do NOT wait for turn completion (status === 'DONE'), enabling instant streaming playback!
+                if (item.source === 'MODEL' && (item.content || item.thinking)) {
+                    const textContent = (item.content || '') + ' ' + (item.thinking || '');
+                    const speechMatch = textContent.match(/\[SPEECH\]([\s\S]*?)\[\/SPEECH\]/i);
+                    if (speechMatch && speechMatch[1].trim()) {
+                        const speechText = speechMatch[1].trim();
+                        const normKey = speechText.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const stepKey = `${latestFile}:${stepIndex}`;
+
+                        if (!spokenStepKeys.has(stepKey) && !spokenSpeechTexts.has(normKey)) {
+                            candidateResponse = { step: stepIndex, speechText };
+                            break;
+                        }
                     }
                 }
             } catch {}
@@ -626,30 +636,33 @@ function checkLatestTranscript() {
             const stepKey = `${latestFile}:${candidateResponse.step}`;
             spokenStepKeys.add(stepKey);
 
-            const content = candidateResponse.content;
-            if (!content.trim()) return;
+            const speechText = candidateResponse.speechText;
+            if (!speechText.trim()) return;
 
-            const speechMatch = content.match(/\[SPEECH\]([\s\S]*?)(\[\/SPEECH\]|$)/i);
-            if (!speechMatch) return;
+            const normKey = speechText.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (spokenSpeechTexts.has(normKey)) {
+                return;
+            }
+            spokenSpeechTexts.add(normKey);
 
-            const speechText = speechMatch[1].trim();
-            if (!speechText) return;
-
-            // Check if this speech text was already spoken via MCP tool or tts_player within the last 45 seconds
+            // Check if this speech text was already spoken via MCP tool or tts_player within the last 60 seconds
             try {
                 const dedupFile = '/tmp/insitu_last_spoken.json';
                 if (fs.existsSync(dedupFile)) {
                     const dedupData = JSON.parse(fs.readFileSync(dedupFile, 'utf-8'));
-                    if (dedupData.text && (dedupData.text === speechText || speechText.includes(dedupData.text) || dedupData.text.includes(speechText))) {
-                        if (Date.now() - (dedupData.time * 1000) < 45000) {
-                            console.log('[InSitu] Speech was already spoken via MCP tool / TTS player. Skipping duplicate speech.');
-                            return;
+                    if (dedupData.text) {
+                        const dedupNorm = dedupData.text.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (dedupNorm === normKey || normKey.includes(dedupNorm) || dedupNorm.includes(normKey)) {
+                            if (Date.now() - (dedupData.time * 1000) < 60000) {
+                                console.log('[InSitu] Speech was already spoken via MCP tool / TTS player. Skipping duplicate speech.');
+                                return;
+                            }
                         }
                     }
                 }
             } catch {}
 
-            if (lastSpokenText === speechText && now - lastSpokenTime < 15000) {
+            if (lastSpokenText === speechText && now - lastSpokenTime < 20000) {
                 return;
             }
 
