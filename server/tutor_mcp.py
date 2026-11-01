@@ -88,7 +88,19 @@ async def speak_to_user(message: str) -> str:
     - Pose a focused question prompting the user on how to proceed, what invariants exist, or why an approach was chosen.
     - You may also use [SPEECH] spoken question [/SPEECH] tags inside your message."""
     try:
-        # Launch directly in background thread with warm in-memory model for sub-second delivery
+        # 1. Fast path: Forward to InSitu warm daemon (sub-100ms dispatch)
+        try:
+            req = urllib.request.Request(
+                "http://127.0.0.1:6422/speak",
+                data=json.dumps({"text": message}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=0.8):
+                return "Spoken message dispatched via warm InSitu Daemon."
+        except Exception:
+            pass
+
+        # 2. Fallback: Launch directly in background thread with warm in-memory model
         threading.Thread(target=tts_player.speak, args=(message,), kwargs={"blocking": True}, daemon=True).start()
         return "Spoken message dispatched via InSitu TTS."
     except Exception as e:
@@ -98,6 +110,12 @@ async def speak_to_user(message: str) -> str:
 async def stop_speech() -> str:
     """Instantly silences and stops any currently active spoken audio."""
     try:
+        try:
+            req = urllib.request.Request("http://127.0.0.1:6422/stop_speech", data=b"{}", headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=0.5):
+                pass
+        except Exception:
+            pass
         tts_player.stop_speech()
         return "Spoken audio stopped and silenced."
     except Exception as e:

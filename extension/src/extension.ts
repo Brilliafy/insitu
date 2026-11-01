@@ -12,6 +12,86 @@ const STT_SCRIPT = '/home/Aelfwif/insitu/server/stt_transcriber.py';
 const TTS_SCRIPT = '/home/Aelfwif/insitu/server/tts_player.py';
 const MODEL_MANAGER_SCRIPT = '/home/Aelfwif/insitu/server/model_manager.py';
 const TTS_MANAGER_SCRIPT = '/home/Aelfwif/insitu/server/tts_manager.py';
+const DAEMON_SCRIPT = '/home/Aelfwif/insitu/server/insitu_daemon.py';
+const DAEMON_URL = 'http://127.0.0.1:6422';
+
+function queryDaemon(endpoint: string, data?: any, method: string = 'POST', timeoutMs: number = 35000): Promise<any> {
+    return new Promise((resolve, reject) => {
+        try {
+            const u = new URL(`${DAEMON_URL}${endpoint}`);
+            const postData = data ? JSON.stringify(data) : undefined;
+            const options: http.RequestOptions = {
+                hostname: u.hostname,
+                port: u.port,
+                path: u.pathname,
+                method: method,
+                headers: postData ? {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(postData)
+                } : {},
+                timeout: timeoutMs
+            };
+
+            const req = http.request(options, (res) => {
+                let body = '';
+                res.on('data', d => body += d);
+                res.on('end', () => {
+                    try {
+                        resolve(JSON.parse(body));
+                    } catch {
+                        resolve({ raw: body });
+                    }
+                });
+            });
+
+            req.on('error', reject);
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Daemon request timed out'));
+            });
+
+            if (postData) req.write(postData);
+            req.end();
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
+async function isDaemonOnline(): Promise<boolean> {
+    try {
+        const res = await queryDaemon('/status', undefined, 'GET', 500);
+        return res && res.status === 'online';
+    } catch {
+        return false;
+    }
+}
+
+async function ensureDaemonRunning() {
+    const online = await isDaemonOnline();
+    if (online) return;
+
+    if (fs.existsSync(DAEMON_SCRIPT) && fs.existsSync(PYTHON_BIN)) {
+        console.log('[InSitu] Starting background persistent CUDA daemon...');
+        try {
+            const child = spawn(PYTHON_BIN, [DAEMON_SCRIPT], {
+                detached: true,
+                stdio: 'ignore'
+            });
+            child.unref();
+
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 250));
+                if (await isDaemonOnline()) {
+                    console.log('[InSitu] Daemon is now online!');
+                    break;
+                }
+            }
+        } catch (e) {
+            console.warn('[InSitu] Could not spawn daemon:', e);
+        }
+    }
+}
 
 let highlightDecoration: vscode.TextEditorDecorationType;
 let currentMode = 1;
@@ -205,7 +285,7 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     const cleanPrompt = prompt.trim();
     let textToSend = cleanPrompt;
     if (injectSocraticGuidance) {
-        textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nFollow dual-channel protocol: Provide your complete written explanation/code in chat. At the very end, append [SPEECH] 1-2 punchy spoken sentences (15-25 words max) answering the question directly and conversationally like a peer pair-programmer [/SPEECH] or call speak_to_user via MCP.`;
+        textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nFollow dual-channel protocol: IMMEDIATELY output [SPEECH] 1-2 punchy spoken sentences (15-25 words max) directly answering the core question [/SPEECH] at the VERY START of your response (or call speak_to_user via MCP). Then provide your full written explanation and code below.`;
     } else {
         textToSend = `${cleanPrompt}\n\n[InSitu Addon: Mode ${currentMode}]`;
     }
@@ -248,20 +328,37 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     vscode.window.showInformationMessage(`Prompt sent to AI Agent: "${cleanPrompt.slice(0, 45)}..."`);
 }
 
-function replayVoice(text?: string, force: boolean = false) {
+async function replayVoice(text?: string, force: boolean = false) {
     const msg = text || state.lastSpoken || 'Replaying last tutor guidance.';
+    if (!msg || !msg.trim()) return;
+
+    state.isSpeaking = true;
+    notifySpeakingStatus(true);
+    if (currentQuickPick) {
+        updateQuickPickRecordingUI(currentQuickPick, state.isRecording || false);
+    }
+
+    // 1. Fast Path: InSitu Daemon (prewarmed in RAM, sub-100ms dispatch)
+    try {
+        if (await isDaemonOnline()) {
+            await queryDaemon('/speak', {
+                text: msg,
+                engine: activeTTSEngine,
+                voice_id: activeTTSVoice
+            }, 'POST', 15000);
+            return;
+        }
+    } catch (e) {
+        console.warn('[InSitu] Daemon speech dispatch error, using fallback process:', e);
+    }
+
+    // 2. Fallback Path: Spawning tts_player.py
     if (fs.existsSync(TTS_SCRIPT) && fs.existsSync(PYTHON_BIN)) {
         if (activeTTSChild) {
             try {
                 activeTTSChild.kill('SIGTERM');
             } catch {}
             activeTTSChild = undefined;
-        }
-
-        state.isSpeaking = true;
-        notifySpeakingStatus(true);
-        if (currentQuickPick) {
-            updateQuickPickRecordingUI(currentQuickPick, state.isRecording || false);
         }
 
         const args = force ? [TTS_SCRIPT, '--force', msg] : [TTS_SCRIPT, msg];
@@ -288,6 +385,7 @@ function replayVoice(text?: string, force: boolean = false) {
 }
 
 function stopSpeech() {
+    queryDaemon('/stop_speech', {}, 'POST', 600).catch(() => {});
     if (activeTTSChild) {
         try {
             activeTTSChild.kill('SIGTERM');
@@ -368,7 +466,7 @@ function startTranscriptWatcher() {
         } catch (e) {
             console.error('[InSitu] Transcript watcher error:', e);
         }
-    }, 500);
+    }, 120);
 }
 
 function stopTranscriptWatcher() {
@@ -513,7 +611,7 @@ function sendMicControl(command: 'STOP' | 'CANCEL') {
     }
 }
 
-function startRecording(qp?: vscode.QuickPick<any>) {
+async function startRecording(qp?: vscode.QuickPick<any>) {
     if (state.isRecording) {
         return;
     }
@@ -521,11 +619,48 @@ function startRecording(qp?: vscode.QuickPick<any>) {
     state.isRecording = true;
     isRecordingCancelled = false;
     notifyRecordingStatus(true);
+    if (qp) {
+        updateQuickPickRecordingUI(qp, true);
+    }
 
+    // 1. Fast Path: InSitu Persistent CUDA Daemon (< 1s turnaround, zero-cold-boot)
+    try {
+        if (await isDaemonOnline()) {
+            console.log('[InSitu] Starting dictation via warm CUDA daemon...');
+            const silenceSec = silenceAutostop ? 0.8 : 999.0;
+            const res = await queryDaemon('/record', { silence_seconds: silenceSec, max_duration: 30.0 }, 'POST', 35000);
+
+            state.isRecording = false;
+            notifyRecordingStatus(false);
+            if (qp) updateQuickPickRecordingUI(qp, false);
+
+            if (isRecordingCancelled || res.cancelled) {
+                console.log('[InSitu] Dictation was cancelled by user. Discarding output.');
+                if (qp) qp.placeholder = "Recording cancelled.";
+                return;
+            }
+
+            if (res.text && res.text.trim()) {
+                notifyTranscription(res.text);
+                if (qp) {
+                    qp.value = res.text;
+                    qp.hide();
+                }
+                promptAI(res.text, true);
+            } else {
+                if (qp) qp.placeholder = "No speech detected. Click 🎙 to speak...";
+            }
+            return;
+        }
+    } catch (e: any) {
+        console.warn('[InSitu] Daemon recording error, using fallback process:', e);
+    }
+
+    // 2. Fallback Path: Spawning stt_transcriber.py
     // Remove any stale control file
     try { if (fs.existsSync(CTRL_FILE)) fs.unlinkSync(CTRL_FILE); } catch {}
 
-    const args = ['--mic', '--max-duration', '30.0', '--silence-seconds', '1.2'];
+    const args = ['--mic', '--max-duration', '30.0', '--silence-seconds', '0.8'];
     if (!silenceAutostop) {
         args.push('--no-silence-stop');
     }
@@ -533,10 +668,6 @@ function startRecording(qp?: vscode.QuickPick<any>) {
     micProcess = spawn(PYTHON_BIN, [STT_SCRIPT, ...args]);
     let stdout = '';
     let stderr = '';
-
-    if (qp) {
-        updateQuickPickRecordingUI(qp, true);
-    }
 
     micProcess.stdout?.on('data', d => stdout += d.toString());
     micProcess.stderr?.on('data', d => stderr += d.toString());
@@ -599,11 +730,13 @@ function startRecording(qp?: vscode.QuickPick<any>) {
 }
 
 function stopRecording() {
+    queryDaemon('/stop_mic', {}, 'POST', 600).catch(() => {});
     sendMicControl('STOP');
 }
 
 function cancelRecording() {
     isRecordingCancelled = true;
+    queryDaemon('/cancel', {}, 'POST', 600).catch(() => {});
     sendMicControl('CANCEL');
     if (micProcess) {
         try {
@@ -622,7 +755,7 @@ function cancelRecording() {
 function updateQuickPickRecordingUI(qp: vscode.QuickPick<any>, recording: boolean) {
     if (recording) {
         qp.busy = true;
-        qp.title = `🔴 Recording... [■ Stop to send, ✕ Cancel] (${silenceAutostop ? '1.2s auto-stop ON' : 'Manual stop'})`;
+        qp.title = `🔴 Recording... [■ Stop to send, ✕ Cancel] (${silenceAutostop ? '0.8s snappy auto-stop' : 'Manual stop'})`;
         qp.placeholder = "Listening... (Speak your prompt, click ■ Stop to send immediately, ✕ or Esc to cancel)";
 
         const btnStop: vscode.QuickInputButton = {
@@ -1738,7 +1871,8 @@ function notifyTranscription(text: string) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('[InSitu] Activating in-window extension v0.3.0...');
+    console.log('[InSitu] Activating InSitu extension v0.3.3...');
+    ensureDaemonRunning();
     startTranscriptWatcher();
 
     // 1. Initialize Visual Highlight Decoration (Soft modern cyan tint with left accent line)
