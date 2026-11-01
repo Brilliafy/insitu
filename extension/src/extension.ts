@@ -204,6 +204,8 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     let textToSend = cleanPrompt;
     if (injectSocraticGuidance) {
         textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nFollow dual-channel protocol: Provide your complete written explanation/code in chat. At the very end, append [SPEECH] 1-2 punchy spoken sentences (15-25 words max) [/SPEECH] or call speak_to_user via MCP.`;
+    } else {
+        textToSend = `${cleanPrompt}\n\n[InSitu Addon: Mode ${currentMode}]`;
     }
 
     // 1. Copy prompt to clipboard as universal fallback

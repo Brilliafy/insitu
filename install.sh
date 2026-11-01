@@ -63,14 +63,19 @@ echo -e "\n${CYAN}[3/4] Configuring AI Mentor System Prompt...${NC}"
 GEMINI_MD="/home/Aelfwif/.gemini/GEMINI.md"
 
 DUAL_CHANNEL_PROMPT='
-## 7. Dual-Channel Socratic Code Mentor Protocol
-When interacting with the user or responding to programming requests:
-- Chat / Written Channel: Provide your complete, detailed, and uncompromised technical reasoning, explanations, code blocks, and diagrams in chat. Do NOT truncate or abbreviate written responses.
-- Spoken Audio Channel: Always provide a voice companion message for the user:
-  * At the very end of your final response, append:
-    `[SPEECH] 1-2 punchy, human-like spoken sentences (15-25 words max) summarizing the core answer or asking a guiding pedagogical question [/SPEECH]`
-  * OR call the `speak_to_user(message=...)` tool if available.
-  * Spoken Audio Rules: Punchy, conversational, and pedagogical. Never read out raw markdown tables, URLs, line numbers, or long code snippets in speech.
+## 7. InSitu Dual-Channel Mentor & Voice Protocol (Addon Only)
+- Voice Trigger Restriction (CRITICAL): You MUST ONLY trigger spoken audio (calling the `speak_to_user` tool or appending `[SPEECH] ... [/SPEECH]` tags) IF the user'\''s prompt was submitted through the InSitu extension/addon (indicated by the presence of `[InSitu`, `[InSitu Mentor`, `[Mode 1`, `[Mode 2`, `[Mode 3`, or `Follow dual-channel protocol`).
+- If the user'\''s prompt did NOT originate from the InSitu addon (e.g., standard CLI chat, normal interactive terminal commands, questions without InSitu tags):
+  * DO NOT call `speak_to_user`.
+  * DO NOT append `[SPEECH] ... [/SPEECH]` tags.
+  * Provide standard, high-quality written output only.
+- When the InSitu Addon IS used:
+  * Chat / Written Channel: Provide your complete, detailed, and uncompromised technical reasoning, explanations, code blocks, and diagrams in chat. Do NOT truncate or abbreviate written responses.
+  * Spoken Audio Channel: Provide a voice companion message for the user:
+    - At the very end of your final response, append:
+      `[SPEECH] 1-2 punchy, human-like spoken sentences (15-25 words max) summarizing the core answer or asking a guiding pedagogical question [/SPEECH]`
+    - OR call the `speak_to_user(message=...)` tool if available.
+    - Spoken Audio Rules: Punchy, conversational, and pedagogical. Never read out raw markdown tables, URLs, line numbers, or long code snippets in speech.
 '
 
 if [ -f "$GEMINI_MD" ]; then
