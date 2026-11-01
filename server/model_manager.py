@@ -17,6 +17,29 @@ from typing import Dict, Any, List, Optional
 import huggingface_hub
 from tqdm.auto import tqdm
 
+# Preload NVIDIA CUDA libraries from pip packages if available
+def setup_cuda_libraries():
+    try:
+        import site, ctypes
+        site_packages = site.getsitepackages()
+        for sp in site_packages:
+            for sub in ["nvidia/cublas/lib", "nvidia/cudnn/lib", "nvidia/cuda_nvrtc/lib"]:
+                p = os.path.join(sp, sub)
+                if os.path.exists(p):
+                    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+                    if p not in ld_path:
+                        os.environ["LD_LIBRARY_PATH"] = f"{p}:{ld_path}"
+                    for f in sorted(os.listdir(p)):
+                        if f.endswith(".so") or ".so." in f:
+                            try:
+                                ctypes.CDLL(os.path.join(p, f), mode=ctypes.RTLD_GLOBAL)
+                            except Exception:
+                                pass
+    except Exception:
+        pass
+
+setup_cuda_libraries()
+
 CONFIG_FILE = "/home/Aelfwif/insitu/stt_config.json"
 MODELS_CACHE_DIR = "/home/Aelfwif/.cache/huggingface/hub"
 
@@ -552,12 +575,27 @@ def set_active_model(model_id: str, auto_download: bool = True) -> Dict[str, Any
         "cached": True
     }
 
+def get_best_cuda_compute_type() -> str:
+    """Returns the optimal supported compute type for the active CUDA GPU."""
+    try:
+        import ctranslate2
+        supported = ctranslate2.get_supported_compute_types("cuda")
+        for pref in ["float16", "int8_float32", "int8", "float32"]:
+            if pref in supported:
+                return pref
+    except Exception:
+        pass
+    return "int8_float32"
+
 def toggle_device() -> Dict[str, Any]:
     cfg = load_config()
     current = cfg.get("device", "cpu")
     new_device = "cuda" if current == "cpu" else "cpu"
     cfg["device"] = new_device
-    cfg["compute_type"] = "float16" if new_device == "cuda" else "int8"
+    if new_device == "cuda":
+        cfg["compute_type"] = get_best_cuda_compute_type()
+    else:
+        cfg["compute_type"] = "int8"
     save_config(cfg)
     return {
         "status": "ok",
@@ -571,7 +609,10 @@ def set_device(dev: str) -> Dict[str, Any]:
     if dev not in ["cpu", "cuda"]:
         dev = "cpu"
     cfg["device"] = dev
-    cfg["compute_type"] = "float16" if dev == "cuda" else "int8"
+    if dev == "cuda":
+        cfg["compute_type"] = get_best_cuda_compute_type()
+    else:
+        cfg["compute_type"] = "int8"
     save_config(cfg)
     return {
         "status": "ok",

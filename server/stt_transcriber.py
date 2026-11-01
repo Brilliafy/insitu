@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Socratic Tutor STT Transcriber with VAD, Dynamic Model Loading & Coding Prompt Bias
+InSitu STT Transcriber with VAD, Background Prewarming, Dynamic Model Loading & Coding Prompt Bias
 Features:
-- Real-time audio streaming with 2s silence autostop (togglable)
-- Control commands: STOP (manually finish) & CANCEL (abort)
-- Dynamic model support: Moonshine ONNX & Faster-Whisper (CTranslate2 INT8)
+- Real-time audio streaming with configurable silence autostop (default 1.2s for instant response)
+- Background model prewarming during recording for sub-second transcription turnaround
+- True GPU CUDA acceleration (Pascal int8_float32 / Ampere float16) with libcublas/cudnn preload
+- Control commands: STOP (manually finish) & CANCEL (abort immediately without sending prompt)
 - Coding vocabulary prompt bias for snake_case, kubectl, async/await, camelCase, etc.
 """
 
@@ -15,13 +16,87 @@ import json
 import tempfile
 import subprocess
 import argparse
+import threading
 import numpy as np
+
+# Dynamically preload CUDA runtime libraries from nvidia pip packages if available
+def setup_cuda_libraries():
+    try:
+        import site, ctypes
+        site_packages = site.getsitepackages()
+        for sp in site_packages:
+            for sub in ["nvidia/cublas/lib", "nvidia/cudnn/lib", "nvidia/cuda_nvrtc/lib"]:
+                p = os.path.join(sp, sub)
+                if os.path.exists(p):
+                    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+                    if p not in ld_path:
+                        os.environ["LD_LIBRARY_PATH"] = f"{p}:{ld_path}"
+                    for f in sorted(os.listdir(p)):
+                        if f.endswith(".so") or ".so." in f:
+                            try:
+                                ctypes.CDLL(os.path.join(p, f), mode=ctypes.RTLD_GLOBAL)
+                            except Exception:
+                                pass
+    except Exception:
+        pass
+
+setup_cuda_libraries()
 
 # Import model manager
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from model_manager import load_config
 
 CTRL_FILE = "/tmp/insitu_mic_ctrl"
+_MODEL_CACHE = {}
+
+def get_best_cuda_compute_type() -> str:
+    """Returns the best supported CTranslate2 compute type for current CUDA GPU."""
+    try:
+        import ctranslate2
+        supported = ctranslate2.get_supported_compute_types("cuda")
+        # Preference: float16 (modern RTX), int8_float32 (Pascal GTX 1050/1650), int8, float32
+        for pref in ["float16", "int8_float32", "int8", "float32"]:
+            if pref in supported:
+                return pref
+    except Exception:
+        pass
+    return "int8_float32"
+
+def get_whisper_model(model_id: str, device: str = "cpu", compute_type: str = "int8"):
+    global _MODEL_CACHE
+    key = (model_id, device)
+    if key in _MODEL_CACHE:
+        return _MODEL_CACHE[key]
+
+    from faster_whisper import WhisperModel
+    if device == "cuda":
+        best_compute = get_best_cuda_compute_type()
+        try:
+            print(f"[InSitu STT] Initializing Whisper model on CUDA (compute_type={best_compute})...", file=sys.stderr)
+            model = WhisperModel(model_id, device="cuda", compute_type=best_compute)
+            _MODEL_CACHE[key] = model
+            return model
+        except Exception as e:
+            print(f"[InSitu STT] Warning: CUDA error ({e}). Falling back to CPU.", file=sys.stderr)
+            model = WhisperModel(model_id, device="cpu", compute_type="int8")
+            _MODEL_CACHE[(model_id, "cpu")] = model
+            return model
+    else:
+        model = WhisperModel(model_id, device="cpu", compute_type="int8")
+        _MODEL_CACHE[key] = model
+        return model
+
+def preload_active_model_async():
+    """Warms the active STT model in background while user speaks so transcription is instant."""
+    try:
+        cfg = load_config()
+        if cfg.get("engine") == "whisper":
+            model_id = cfg.get("model_id", "Systran/faster-distil-whisper-small.en")
+            device = cfg.get("device", "cuda")
+            compute_type = cfg.get("compute_type", "int8_float32")
+            get_whisper_model(model_id, device=device, compute_type=compute_type)
+    except Exception as e:
+        print(f"[InSitu STT] Preload warning: {e}", file=sys.stderr)
 
 def convert_to_wav16k(input_file: str) -> str:
     if input_file.lower().endswith(".wav"):
@@ -34,16 +109,6 @@ def convert_to_wav16k(input_file: str) -> str:
     ]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     return out_wav
-
-def get_whisper_model(model_id: str, device: str = "cpu", compute_type: str = "int8"):
-    from faster_whisper import WhisperModel
-    if device == "cuda":
-        try:
-            return WhisperModel(model_id, device="cuda", compute_type="float16")
-        except Exception as e:
-            print(f"[Socratic STT] Warning: CUDA error ({e}). Falling back to CPU.", file=sys.stderr)
-            return WhisperModel(model_id, device="cpu", compute_type="int8")
-    return WhisperModel(model_id, device="cpu", compute_type="int8")
 
 def transcribe_audio_data(audio_data: np.ndarray) -> str:
     """Transcribes in-memory float32 audio data using the currently configured STT model."""
@@ -119,7 +184,7 @@ def transcribe_file(file_path: str) -> str:
 def record_with_vad(
     max_duration: float = 30.0,
     silence_autostop: bool = True,
-    silence_seconds: float = 2.0,
+    silence_seconds: float = 1.2,
     ctrl_file: str = CTRL_FILE
 ) -> dict:
     import sounddevice as sd
@@ -130,6 +195,9 @@ def record_with_vad(
             os.remove(ctrl_file)
     except Exception:
         pass
+
+    # Start background model prewarming thread immediately
+    threading.Thread(target=preload_active_model_async, daemon=True).start()
 
     sample_rate = 16000
     chunk_samples = 1024
@@ -162,6 +230,7 @@ def record_with_vad(
                 # 2. Check control commands (STOP / CANCEL)
                 ctrl = check_control()
                 if ctrl == "CANCEL":
+                    print("[InSitu STT] Recording cancelled by user.", file=sys.stderr)
                     return {"cancelled": True}
                 elif ctrl == "STOP":
                     break
@@ -176,7 +245,7 @@ def record_with_vad(
                     if has_spoken:
                         consecutive_silence += chunk_duration
                         if silence_autostop and consecutive_silence >= silence_seconds:
-                            print(f"[VAD] 2s silence detected, auto-stopping.", file=sys.stderr)
+                            print(f"[VAD] {silence_seconds}s silence detected, auto-stopping.", file=sys.stderr)
                             break
 
                 # 4. Check max duration timeout
@@ -196,9 +265,13 @@ def record_with_vad(
 
     audio_data = np.concatenate(recorded_chunks, axis=0)
 
-    # If audio is practically silent (< 0.2s of actual sound), don't waste time
-    if len(audio_data) < sample_rate * 0.4:
+    # If audio is practically silent (< 0.25s of sound), return empty
+    if len(audio_data) < sample_rate * 0.25:
         return {"text": ""}
+
+    # Check cancel again before transcription
+    if check_control() == "CANCEL":
+        return {"cancelled": True}
 
     # Transcribe via active STT engine
     try:
@@ -208,12 +281,12 @@ def record_with_vad(
         return {"error": str(e)}
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Socratic STT Transcriber")
+    parser = argparse.ArgumentParser(description="InSitu STT Transcriber")
     parser.add_argument("file", nargs="?", default=None, help="Audio file to transcribe")
     parser.add_argument("--mic", action="store_true", help="Record from mic")
     parser.add_argument("--max-duration", type=float, default=25.0, help="Max duration in seconds")
-    parser.add_argument("--no-silence-stop", action="store_true", help="Disable 2s silence autostop")
-    parser.add_argument("--silence-seconds", type=float, default=2.0, help="Seconds of silence to trigger autostop")
+    parser.add_argument("--no-silence-stop", action="store_true", help="Disable silence autostop")
+    parser.add_argument("--silence-seconds", type=float, default=1.2, help="Seconds of silence to trigger autostop")
     parser.add_argument("--ctrl-file", type=str, default=CTRL_FILE, help="Control file path")
 
     args = parser.parse_args()
@@ -227,6 +300,8 @@ if __name__ == "__main__":
             ctrl_file=args.ctrl_file
         )
         print(json.dumps(res))
+        if res.get("cancelled"):
+            sys.exit(2)
     elif args.file:
         if not os.path.exists(args.file):
             print(json.dumps({"error": f"File not found: {args.file}"}))
@@ -235,5 +310,8 @@ if __name__ == "__main__":
         print(json.dumps({"text": res_text}))
     else:
         # Default to mic
-        res = record_with_vad(max_duration=25.0, silence_autostop=True, silence_seconds=2.0)
+        res = record_with_vad(max_duration=25.0, silence_autostop=True, silence_seconds=1.2)
         print(json.dumps(res))
+        if res.get("cancelled"):
+            sys.exit(2)
+

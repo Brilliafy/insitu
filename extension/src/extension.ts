@@ -24,6 +24,7 @@ let activeTTSChild: ChildProcess | undefined = undefined;
 let statusBarItem: vscode.StatusBarItem;
 let tutorProvider: SocraticTutorViewProvider;
 let micProcess: ChildProcess | undefined = undefined;
+let isRecordingCancelled = false;
 let silenceAutostop = true;
 let currentQuickPick: vscode.QuickPick<any> | undefined = undefined;
 let activeSTTQuickPick: vscode.QuickPick<any> | undefined = undefined;
@@ -77,7 +78,8 @@ async function toggleHardwareAcceleration() {
         const out = await runPython([MODEL_MANAGER_SCRIPT, 'toggle-device']);
         const res = JSON.parse(out);
         activeSTTDevice = res.device || 'cpu';
-        const label = activeSTTDevice === 'cuda' ? 'GPU (CUDA / Float16)' : 'CPU (INT8 Quantized)';
+        const computeType = res.compute_type || (activeSTTDevice === 'cuda' ? 'int8_float32' : 'int8');
+        const label = activeSTTDevice === 'cuda' ? `GPU (CUDA / ${computeType.toUpperCase()})` : 'CPU (INT8 Quantized)';
         vscode.window.showInformationMessage(`⚡ Hardware Acceleration switched to: ${label}`);
         if (currentQuickPick) {
             updateQuickPickRecordingUI(currentQuickPick, state.isRecording || false);
@@ -203,7 +205,7 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     const cleanPrompt = prompt.trim();
     let textToSend = cleanPrompt;
     if (injectSocraticGuidance) {
-        textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nFollow dual-channel protocol: Provide your complete written explanation/code in chat. At the very end, append [SPEECH] 1-2 punchy spoken sentences (15-25 words max) [/SPEECH] or call speak_to_user via MCP.`;
+        textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nFollow dual-channel protocol: Provide your complete written explanation/code in chat. At the very end, append [SPEECH] 1-2 punchy spoken sentences (15-25 words max) answering the question directly and conversationally like a peer pair-programmer [/SPEECH] or call speak_to_user via MCP.`;
     } else {
         textToSend = `${cleanPrompt}\n\n[InSitu Addon: Mode ${currentMode}]`;
     }
@@ -475,14 +477,14 @@ function checkLatestTranscript() {
             const speechText = speechMatch[1].trim();
             if (!speechText) return;
 
-            // Check if this speech text was already spoken via MCP tool within the last 45 seconds
+            // Check if this speech text was already spoken via MCP tool or tts_player within the last 45 seconds
             try {
-                const mcpTokenFile = '/tmp/insitu_mcp_spoken.json';
-                if (fs.existsSync(mcpTokenFile)) {
-                    const mcpData = JSON.parse(fs.readFileSync(mcpTokenFile, 'utf-8'));
-                    if (mcpData.text && (mcpData.text === speechText || speechText.includes(mcpData.text) || mcpData.text.includes(speechText))) {
-                        if (Date.now() - (mcpData.time * 1000) < 45000) {
-                            console.log('[InSitu] Speech was already spoken via MCP tool. Skipping duplicate speech.');
+                const dedupFile = '/tmp/insitu_last_spoken.json';
+                if (fs.existsSync(dedupFile)) {
+                    const dedupData = JSON.parse(fs.readFileSync(dedupFile, 'utf-8'));
+                    if (dedupData.text && (dedupData.text === speechText || speechText.includes(dedupData.text) || dedupData.text.includes(speechText))) {
+                        if (Date.now() - (dedupData.time * 1000) < 45000) {
+                            console.log('[InSitu] Speech was already spoken via MCP tool / TTS player. Skipping duplicate speech.');
                             return;
                         }
                     }
@@ -517,12 +519,13 @@ function startRecording(qp?: vscode.QuickPick<any>) {
     }
 
     state.isRecording = true;
+    isRecordingCancelled = false;
     notifyRecordingStatus(true);
 
     // Remove any stale control file
     try { if (fs.existsSync(CTRL_FILE)) fs.unlinkSync(CTRL_FILE); } catch {}
 
-    const args = ['--mic', '--max-duration', '30.0', '--silence-seconds', '2.0'];
+    const args = ['--mic', '--max-duration', '30.0', '--silence-seconds', '1.2'];
     if (!silenceAutostop) {
         args.push('--no-silence-stop');
     }
@@ -545,6 +548,13 @@ function startRecording(qp?: vscode.QuickPick<any>) {
 
         if (qp) {
             updateQuickPickRecordingUI(qp, false);
+        }
+
+        // If user cancelled (e.g. hit Esc or Cancel button), discard audio immediately
+        if (isRecordingCancelled || code === 2) {
+            console.log('[InSitu] Dictation was cancelled. Discarding audio output.');
+            if (qp) qp.placeholder = "Recording cancelled.";
+            return;
         }
 
         if (code === 0 && stdout.trim()) {
@@ -593,17 +603,27 @@ function stopRecording() {
 }
 
 function cancelRecording() {
+    isRecordingCancelled = true;
     sendMicControl('CANCEL');
     if (micProcess) {
-        try { micProcess.kill('SIGINT'); } catch {}
+        try {
+            micProcess.kill('SIGKILL');
+        } catch {}
+        micProcess = undefined;
+    }
+    state.isRecording = false;
+    notifyRecordingStatus(false);
+    if (currentQuickPick) {
+        updateQuickPickRecordingUI(currentQuickPick, false);
+        currentQuickPick.placeholder = "Recording cancelled.";
     }
 }
 
 function updateQuickPickRecordingUI(qp: vscode.QuickPick<any>, recording: boolean) {
     if (recording) {
         qp.busy = true;
-        qp.title = `🔴 Recording... [■ Stop to send, ✕ Cancel] (${silenceAutostop ? '2s auto-stop ON' : 'Manual stop'})`;
-        qp.placeholder = "Listening... (Speak your prompt, click ■ Stop to send immediately, ✕ to cancel)";
+        qp.title = `🔴 Recording... [■ Stop to send, ✕ Cancel] (${silenceAutostop ? '1.2s auto-stop ON' : 'Manual stop'})`;
+        qp.placeholder = "Listening... (Speak your prompt, click ■ Stop to send immediately, ✕ or Esc to cancel)";
 
         const btnStop: vscode.QuickInputButton = {
             iconPath: new vscode.ThemeIcon('primitive-square'),
@@ -958,6 +978,7 @@ async function selectSTTModel() {
         const tooltip = btn.tooltip || '';
         if (tooltip.includes('Toggle Hardware Acceleration')) {
             await toggleHardwareAcceleration();
+            await loadItems();
         } else if (tooltip.includes('Coding Vocabulary')) {
             await editPromptPrefix();
             await loadItems();
@@ -975,6 +996,7 @@ async function selectSTTModel() {
 
         if (picked.action === 'toggleDevice') {
             await toggleHardwareAcceleration();
+            await loadItems();
             return;
         }
 
@@ -1696,6 +1718,9 @@ function openInWindowHUD() {
     });
 
     qp.onDidHide(() => {
+        if (state.isRecording) {
+            cancelRecording();
+        }
         currentQuickPick = undefined;
     });
 
