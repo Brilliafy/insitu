@@ -22,15 +22,16 @@
 
 1. **Dual-Channel Socratic Protocol:** The AI agent provides deep technical reasoning, code structures, and diagrams in chat, while concurrently speaking a concise, natural, 1–2 sentence human voice companion out loud via the `speak_to_user` tool.
 2. **Custom-Tailored for Google Antigravity:** Direct native IPC hookups into Antigravity’s native Agent Panel (`antigravity.panel.focus`, `antigravity.addContext`, and `antigravity.triggerSend`), pairing seamlessly with FastMCP tools.
-3. **Mandatory In-File Code Replacement (Mode 1):** When asking for alternative implementations or scaffolding, the AI doesn't just print code in chat—it directly updates and replaces the highlighted lines inside the active file buffer.
-4. **Toggable Read-Only Mode:** Need to ask *"Are there any caveats with this mp.pool?"* without having the AI rewrite your code? Toggle **AI File Modifications: DISABLED** to force the agent into read-only analytical mode.
-5. **Multi-Engine Voice Catalog & Silent Mode ("None"):**
+3. **Voice Commands & Per-Prompt Overrides:** Say *"dash mode 1"*, *"dash mode 2"*, *"dash mode 3"*, or *"dash read-only"* anywhere in your spoken or typed query. InSitu overrides the mode for that specific prompt without modifying your persistent active mode setting, cleanly strips the trigger phrase, and immediately executes with the requested pedagogy.
+4. **Mandatory In-File Code Replacement (Mode 1):** When asking for alternative implementations or scaffolding, the AI doesn't just print code in chat—it directly updates and replaces the highlighted lines inside the active file buffer.
+5. **Toggable Read-Only Mode:** Need to ask *"Are there any caveats with this mp.pool?"* without having the AI rewrite your code? Toggle **AI File Modifications: DISABLED** to force the agent into read-only analytical mode.
+6. **Multi-Engine Voice Catalog & Silent Mode ("None"):**
    - **Edge Neural TTS (Free, Studio Human Quality):** 26 curated neural voices across American, British, Australian, Canadian, Irish, and Indian English accents.
    - **Piper ONNX:** Ultra-fast offline voices (<150ms latency).
    - **Kokoro-82M ONNX:** 54 expressive voices across US, UK, Japanese, and Mandarin.
    - **None (Silent Mode):** Completely mutes all spoken audio and causes the MCP voice tool to silently succeed without playback.
-6. **Prewarmed CUDA Daemon (`:6422`):** Holds Faster-Whisper in GPU VRAM (~350 MB on GTX 1050+) for near-instant transcription with custom coding vocabulary bias (`snake_case`, `kubectl`, `async/await`).
-7. **Topmost Floating HUD (`Ctrl+Alt+T`):** A clean in-window overlay to dictate prompts, switch modes, change voices, or toggle CUDA on the fly.
+7. **Prewarmed CUDA Daemon (`:6422`):** Holds Faster-Whisper in GPU VRAM (~350 MB on GTX 1050+) for near-instant transcription with custom coding vocabulary bias (`snake_case`, `kubectl`, `async/await`).
+8. **Topmost Floating HUD (`Ctrl+Alt+T`):** A clean in-window overlay to dictate prompts, switch modes, change voices, or toggle CUDA on the fly.
 
 ---
 

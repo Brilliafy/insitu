@@ -284,7 +284,65 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
         lastVoicePromptTime = Date.now();
     }
 
-    const cleanPrompt = prompt.trim();
+    const rawPrompt = prompt.trim();
+
+    // 1. Voice Command Detection: Temporary Mode & Edit Overrides for this prompt only
+    // Patterns: 'dash mode 1', '- mode 1', '--mode 1', 'dash mode one', '-m 1', 'dash read only', 'dash edit'
+    let cleanPrompt = rawPrompt;
+    let overrideMode: number | undefined = undefined;
+    let overrideAllowEdits: boolean | undefined = undefined;
+
+    const modeRegex = /(?:^|\s)(?:dash|--|-)\s*mode\s*(1|2|3|one|two|three)\b|(?:^|\s)-m\s*(1|2|3)\b/i;
+    const modeMatch = cleanPrompt.match(modeRegex);
+    if (modeMatch) {
+        const rawVal = (modeMatch[1] || modeMatch[2] || '').toLowerCase();
+        if (rawVal === '1' || rawVal === 'one') overrideMode = 1;
+        else if (rawVal === '2' || rawVal === 'two') overrideMode = 2;
+        else if (rawVal === '3' || rawVal === 'three') overrideMode = 3;
+
+        cleanPrompt = cleanPrompt.replace(modeRegex, ' ').trim();
+    }
+
+    const readOnlyRegex = /(?:^|\s)(?:dash|--|-)\s*(?:mode\s*)?(?:read[\s-]?only|no[\s-]?edits?)\b/i;
+    if (readOnlyRegex.test(cleanPrompt)) {
+        overrideAllowEdits = false;
+        cleanPrompt = cleanPrompt.replace(readOnlyRegex, ' ').trim();
+    }
+
+    const editRegex = /(?:^|\s)(?:dash|--|-)\s*(?:mode\s*)?(?:edit|file[\s-]?edits?|replacement)\b/i;
+    if (editRegex.test(cleanPrompt)) {
+        overrideAllowEdits = true;
+        cleanPrompt = cleanPrompt.replace(editRegex, ' ').trim();
+    }
+
+    cleanPrompt = cleanPrompt.replace(/\s{2,}/g, ' ').trim();
+
+    const effectiveMode = overrideMode !== undefined ? overrideMode : currentMode;
+    const effectiveModeName = effectiveMode === 1
+        ? 'Section Scaffold'
+        : effectiveMode === 2
+        ? 'Line-by-Line Step'
+        : 'Refactor & Doubt';
+
+    const effectiveAllowEdits = overrideAllowEdits !== undefined ? overrideAllowEdits : allowCodeEdits;
+
+    if (overrideMode !== undefined) {
+        vscode.window.showInformationMessage(`🎙️ Voice Command: Overriding to Mode ${effectiveMode} (${effectiveModeName}) for this prompt.`);
+    }
+    if (overrideAllowEdits !== undefined) {
+        vscode.window.showInformationMessage(`🎙️ Voice Command: Overriding AI Code Modifications to ${effectiveAllowEdits ? 'ENABLED' : 'READ-ONLY'} for this prompt.`);
+    }
+
+    // If the prompt consisted solely of the command (e.g. 'dash mode 1'), provide a natural query
+    if (!cleanPrompt) {
+        if (effectiveMode === 1) {
+            cleanPrompt = 'Scaffold and implement this section.';
+        } else if (effectiveMode === 2) {
+            cleanPrompt = 'What is the immediate next line and syntax invariant?';
+        } else {
+            cleanPrompt = 'Please inspect this code, explain its mechanisms, and suggest refactoring options.';
+        }
+    }
 
     // Inspect active editor for file path and selection
     const editor = vscode.window.activeTextEditor;
@@ -312,14 +370,14 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     }
 
     let modeDirective = '';
-    if (!allowCodeEdits) {
+    if (!effectiveAllowEdits) {
         // Read-only / Explanations only mode
-        modeDirective = `[InSitu Mentor Mode ${currentMode}: ${state.modeName} - READ-ONLY / EXPLANATIONS ONLY]
+        modeDirective = `[InSitu Mentor Mode ${effectiveMode}: ${effectiveModeName} - READ-ONLY / EXPLANATIONS ONLY]
 Action Directives (MANDATORY - ZERO CODE MODIFICATIONS):
 1. Voice First: Call \`speak_to_user(message=...)\` via MCP to speak 1-2 punchy spoken sentences (15-25 words max) directly answering the question or caveats out loud. Do NOT write [SPEECH] tags in chat.
 2. Read-Only Mode (STRICT): Do NOT modify, replace, or edit any workspace files or code buffers. Do NOT use file editing tools (such as edit_file or write_file).
 3. Chat Explanation & Analysis: Provide your complete explanation, potential caveats, architectural analysis, and answers exclusively in chat below.`;
-    } else if (currentMode === 1) {
+    } else if (effectiveMode === 1) {
         // Mode 1: Section Scaffold
         if (hasSelectedCode) {
             modeDirective = `[InSitu Mentor Mode 1: Section Scaffold - DIRECT CODE REPLACEMENT MANDATORY]
@@ -340,14 +398,14 @@ Action Directives:
 2. Direct File Edits: Directly apply code modifications to the workspace files using file editing tools.
 3. Chat Explanation: Provide your complete technical explanation in chat below.`;
         }
-    } else if (currentMode === 2) {
+    } else if (effectiveMode === 2) {
         // Mode 2: Line-by-Line Step
         modeDirective = `[InSitu Mentor Mode 2: Line-by-Line Step]
 Action Directives:
 1. Voice First: Call \`speak_to_user(message=...)\` to speak a single punchy question or observation (15-25 words max) about the immediate next line or state invariant. Do NOT write [SPEECH] tags in chat.
 2. Single-Line Edit: Write or edit ONLY the single immediate next line in ${filePath || 'the active file'}. Do NOT implement multiple lines or complete the entire block.
 3. Chat Drill: In chat, explain the syntax invariant or type contract for that single line.`;
-    } else if (currentMode === 3) {
+    } else if (effectiveMode === 3) {
         // Mode 3: Refactor & Doubt
         modeDirective = `[InSitu Mentor Mode 3: Refactor & Doubt]
 Action Directives:
@@ -355,7 +413,7 @@ Action Directives:
 2. Targeted Refactor: If the user is asking to rewrite, optimize, or refactor this code, directly apply the refactor to ${filePath || 'the active file'} using your file editing tool.
 3. Chat Deep Dive: Explain the mechanism, trade-offs, potential concurrency/memory bugs or edge cases in chat below.`;
     } else {
-        modeDirective = `[InSitu Mentor Mode ${currentMode}: ${state.modeName}]
+        modeDirective = `[InSitu Mentor Mode ${effectiveMode}: ${effectiveModeName}]
 Dual-Channel Voice Protocol (MANDATORY): You MUST FIRST call the \`speak_to_user(message=...)\` MCP tool to speak 1-2 punchy spoken sentences (15-25 words max) directly answering the core question out loud to the user. Do NOT write [SPEECH] tags in chat. After calling \`speak_to_user\`, apply necessary file changes and write your technical explanation in chat below.`;
     }
 
@@ -363,7 +421,7 @@ Dual-Channel Voice Protocol (MANDATORY): You MUST FIRST call the \`speak_to_user
     if (injectSocraticGuidance) {
         textToSend = `${cleanPrompt}\n\n${fileContext}${modeDirective}`;
     } else {
-        textToSend = `${cleanPrompt}\n\n${fileContext}[InSitu Addon: Mode ${currentMode}]\nPlease call \`speak_to_user(message=...)\` via MCP to speak aloud first.`;
+        textToSend = `${cleanPrompt}\n\n${fileContext}[InSitu Addon: Mode ${effectiveMode}]\nPlease call \`speak_to_user(message=...)\` via MCP to speak aloud first.`;
     }
 
     // 1. Copy prompt to clipboard as universal fallback

@@ -9,6 +9,7 @@ In-Window Topmost HUD Overlay with Low-Latency STT/TTS Voice Dictation, Visual I
 ## Features
 
 - **Customized for Google Antigravity:** Direct native IPC integration via `antigravity.addContext` and `antigravity.triggerSend`, native agent panel auto-focus, and integrated FastMCP server.
+- **Voice Commands & Per-Prompt Overrides:** Say *"dash mode 1"*, *"dash mode 2"*, *"dash mode 3"*, or *"dash read-only"* to override the mode for a single prompt without changing your active configuration.
 - **In-Window Floating HUD Capsule (`Ctrl+Alt+T`)**: Minimalist, frameless HUD overlay for hands-free pair-programming.
 - **Voice Dictation (`Ctrl+Alt+M`)**: Low-latency local transcription with coding vocabulary bias (`snake_case`, `kubectl`, `async/await`).
 - **Dual-Channel Voice Mentorship**: Full technical explanations in chat paired with punchy 1–2 sentence human spoken audio companions via `speak_to_user`.

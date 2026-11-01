@@ -47,7 +47,8 @@ DEFAULT_CODE_PREFIX = (
     "JavaScript, TypeScript, Python, C++, Rust, Go, "
     "snake_case, camelCase, PascalCase, kebab-case, "
     "kubectl, async/await, const, let, fn, def, struct, impl, "
-    "return, import, from, git, PR, API, JSON, GraphQL, SQL, Docker"
+    "return, import, from, git, PR, API, JSON, GraphQL, SQL, Docker, "
+    "dash mode 1, dash mode 2, dash mode 3, dash read-only, dash edit"
 )
 
 PRESET_MODELS = [
