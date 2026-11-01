@@ -284,11 +284,78 @@ async function promptAI(prompt: string, fromVoice: boolean = false) {
     }
 
     const cleanPrompt = prompt.trim();
+
+    // Inspect active editor for file path and selection
+    const editor = vscode.window.activeTextEditor;
+    let fileContext = '';
+    let hasSelectedCode = false;
+    let filePath = '';
+    let startLine = 0;
+    let endLine = 0;
+
+    if (editor && editor.document && editor.document.uri.scheme === 'file') {
+        filePath = editor.document.fileName;
+        const sel = editor.selection;
+        if (!sel.isEmpty) {
+            startLine = sel.start.line + 1;
+            endLine = sel.end.line + 1;
+            const selectedText = editor.document.getText(sel).trim();
+            if (selectedText) {
+                hasSelectedCode = true;
+                fileContext = `Active Target: ${filePath} (Lines ${startLine}-${endLine})\nSelected Code to Act Upon:\n\`\`\`${editor.document.languageId || ''}\n${selectedText}\n\`\`\`\n\n`;
+            }
+        } else {
+            const cursorLine = sel.active.line + 1;
+            fileContext = `Active Target: ${filePath} (Cursor at Line ${cursorLine})\n\n`;
+        }
+    }
+
+    let modeDirective = '';
+    if (currentMode === 1) {
+        // Mode 1: Section Scaffold
+        if (hasSelectedCode) {
+            modeDirective = `[InSitu Mentor Mode 1: Section Scaffold - DIRECT CODE REPLACEMENT MANDATORY]
+Action Directives:
+1. Voice Summary First: You MUST FIRST call the \`speak_to_user(message=...)\` MCP tool to speak 1-2 punchy spoken sentences (15-25 words max) out loud explaining the architectural decision or alternative. Do NOT write [SPEECH] tags in chat.
+2. Direct Code Replacement (CRITICAL): You MUST DIRECTLY EDIT and REPLACE the highlighted section in ${filePath} (Lines ${startLine}-${endLine}) with the clean, production-ready implementation using your file editing tool (e.g. \`edit_file\`). Do NOT just print the replacement in chat—actually apply the modification to the file so the editor reflects the change.
+3. Chat Explanation: After applying the file replacement, provide a clear, concise breakdown of the architectural trade-offs in chat below.`;
+        } else if (filePath) {
+            modeDirective = `[InSitu Mentor Mode 1: Section Scaffold - DIRECT FILE SCAFFOLDING]
+Action Directives:
+1. Voice Summary First: You MUST FIRST call the \`speak_to_user(message=...)\` MCP tool to speak 1-2 punchy spoken sentences (15-25 words max) out loud explaining the scaffold structure. Do NOT write [SPEECH] tags in chat.
+2. Direct Code Scaffolding: You MUST DIRECTLY WRITE the scaffolded block/section into ${filePath} around line ${startLine || 1} using your file editing tool.
+3. Chat Explanation: Explain the design structure and next steps in chat below.`;
+        } else {
+            modeDirective = `[InSitu Mentor Mode 1: Section Scaffold]
+Action Directives:
+1. Voice First: Call \`speak_to_user(message=...)\` to speak 1-2 punchy spoken sentences (15-25 words max) directly answering out loud. Do NOT write [SPEECH] tags in chat.
+2. Direct File Edits: Directly apply code modifications to the workspace files using file editing tools.
+3. Chat Explanation: Provide your complete technical explanation in chat below.`;
+        }
+    } else if (currentMode === 2) {
+        // Mode 2: Line-by-Line Step
+        modeDirective = `[InSitu Mentor Mode 2: Line-by-Line Step]
+Action Directives:
+1. Voice First: Call \`speak_to_user(message=...)\` to speak a single punchy question or observation (15-25 words max) about the immediate next line or state invariant. Do NOT write [SPEECH] tags in chat.
+2. Single-Line Edit: Write or edit ONLY the single immediate next line in ${filePath || 'the active file'}. Do NOT implement multiple lines or complete the entire block.
+3. Chat Drill: In chat, explain the syntax invariant or type contract for that single line.`;
+    } else if (currentMode === 3) {
+        // Mode 3: Refactor & Doubt
+        modeDirective = `[InSitu Mentor Mode 3: Refactor & Doubt]
+Action Directives:
+1. Voice First: Call \`speak_to_user(message=...)\` to speak 1-2 punchy spoken sentences (15-25 words max) answering the core doubt out loud. Do NOT write [SPEECH] tags in chat.
+2. Targeted Refactor: If the user is asking to rewrite, optimize, or refactor this code, directly apply the refactor to ${filePath || 'the active file'} using your file editing tool.
+3. Chat Deep Dive: Explain the mechanism, trade-offs, potential concurrency/memory bugs or edge cases in chat below.`;
+    } else {
+        modeDirective = `[InSitu Mentor Mode ${currentMode}: ${state.modeName}]
+Dual-Channel Voice Protocol (MANDATORY): You MUST FIRST call the \`speak_to_user(message=...)\` MCP tool to speak 1-2 punchy spoken sentences (15-25 words max) directly answering the core question out loud to the user. Do NOT write [SPEECH] tags in chat. After calling \`speak_to_user\`, apply necessary file changes and write your technical explanation in chat below.`;
+    }
+
     let textToSend = cleanPrompt;
     if (injectSocraticGuidance) {
-        textToSend = `${cleanPrompt}\n\n[InSitu Mentor Mode ${currentMode}: ${state.modeName}]\nDual-Channel Voice Protocol (MANDATORY): You MUST FIRST call the \`speak_to_user(message=...)\` MCP tool to speak 1-2 punchy spoken sentences (15-25 words max) directly answering the core question out loud to the user. Do NOT write [SPEECH] tags in chat. After calling \`speak_to_user\`, write your complete technical explanation and code in chat below.`;
+        textToSend = `${cleanPrompt}\n\n${fileContext}${modeDirective}`;
     } else {
-        textToSend = `${cleanPrompt}\n\n[InSitu Addon: Mode ${currentMode}]\nPlease call \`speak_to_user(message=...)\` via MCP to speak aloud first.`;
+        textToSend = `${cleanPrompt}\n\n${fileContext}[InSitu Addon: Mode ${currentMode}]\nPlease call \`speak_to_user(message=...)\` via MCP to speak aloud first.`;
     }
 
     // 1. Copy prompt to clipboard as universal fallback
@@ -1455,6 +1522,12 @@ async function selectTTSModel() {
             const items: (vscode.QuickPickItem & { modelId?: string; modelName?: string; isCached?: boolean; action?: string })[] = [];
 
             items.push({
+                label: `$(unmute) Choose Voice Preset for Active Engine (${activeTTSEngine.toUpperCase()} - ${activeTTSVoice})...`,
+                description: 'Pick voice/accent from current engine catalog',
+                action: 'selectVoice'
+            });
+
+            items.push({
                 label: '✨ TIER 0: CLOUD NEURAL (Free, Studio Human Quality, 0 VRAM/CPU)',
                 kind: vscode.QuickPickItemKind.Separator
             });
@@ -1524,8 +1597,8 @@ async function selectTTSModel() {
                 action: 'deleteTTSCache'
             });
             items.push({
-                label: '$(unmute) Select Preset Voice (54 Kokoro / 6 Piper Voices)...',
-                description: `Current Voice: ${activeTTSVoice}`,
+                label: '$(unmute) Select Preset Voice (26 Edge / 54 Kokoro / 6 Piper Voices)...',
+                description: `Current Voice: ${activeTTSVoice} (${activeTTSEngine.toUpperCase()})`,
                 action: 'selectVoice'
             });
             items.push({
@@ -1585,7 +1658,8 @@ async function selectTTSModel() {
         if (picked.modelId) {
             if (picked.isCached) {
                 const actions: (vscode.QuickPickItem & { act: string })[] = [
-                    { label: '$(check) Set as Active TTS Model', description: `Synthesize speech with ${picked.modelName}`, act: 'activate' },
+                    { label: '$(check) Activate & Choose Voice...', description: `Set as active model and pick voice preset`, act: 'activateAndPickVoice' },
+                    { label: '$(check) Set as Active TTS Model', description: `Synthesize speech with default voice (${picked.modelName})`, act: 'activate' },
                     { label: '$(trash) Delete Cache & Reclaim Disk Space', description: 'Removes downloaded model weights from disk', act: 'delete' },
                     { label: '$(close) Cancel', description: 'Keep current settings', act: 'cancel' }
                 ];
@@ -1596,10 +1670,16 @@ async function selectTTSModel() {
                 });
                 if (!chosen || chosen.act === 'cancel') return;
 
-                if (chosen.act === 'activate') {
+                if (chosen.act === 'activateAndPickVoice') {
                     await runPython([TTS_MANAGER_SCRIPT, '--set-model', picked.modelId]);
                     await refreshActiveTTSModel();
                     vscode.window.showInformationMessage(`✅ Active TTS model set to: ${picked.modelName}`);
+                    await selectTTSVoice();
+                    await loadItems();
+                } else if (chosen.act === 'activate') {
+                    await runPython([TTS_MANAGER_SCRIPT, '--set-model', picked.modelId]);
+                    await refreshActiveTTSModel();
+                    vscode.window.showInformationMessage(`✅ Active TTS model set to: ${picked.modelName} (Voice: ${activeTTSVoice})`);
                     await loadItems();
                 } else if (chosen.act === 'delete') {
                     const confirm = await vscode.window.showWarningMessage(
@@ -1619,11 +1699,12 @@ async function selectTTSModel() {
             } else {
                 const confirm = await vscode.window.showInformationMessage(
                     `Model "${picked.modelName}" needs to be downloaded from Hugging Face. Proceed with download?`,
-                    'Download Now',
+                    'Download & Pick Voice',
                     'Cancel'
                 );
-                if (confirm === 'Download Now') {
+                if (confirm === 'Download & Pick Voice') {
                     await downloadAndSetTTSModel(picked.modelId, picked.modelName || picked.modelId);
+                    await selectTTSVoice();
                     await loadItems();
                 }
             }
@@ -1652,7 +1733,7 @@ async function selectTTSVoice() {
 
     const items: (vscode.QuickPickItem & { voiceId?: string; voiceName?: string })[] = [];
 
-    const accents = ['American', 'British', 'Australian', 'Japanese', 'Mandarin'];
+    const accents = ['American', 'British', 'Australian', 'Canadian', 'Irish', 'Indian', 'Japanese', 'Mandarin'];
     for (const accent of accents) {
         const group = voices.filter(v => v.accent === accent);
         if (group.length > 0) {
@@ -1782,7 +1863,7 @@ function openInWindowHUD() {
             },
             {
                 label: `$(unmute) Select Preset Voice (${activeTTSVoice})`,
-                description: 'Pick from 54 Kokoro voices (US/UK/JA/ZH) or Piper voices',
+                description: 'Pick from 26 Edge Neural voices, 6 Piper voices, or 54 Kokoro voices',
                 action: 'selectVoice'
             },
             {

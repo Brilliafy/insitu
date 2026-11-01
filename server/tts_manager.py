@@ -170,19 +170,38 @@ KOKORO_VOICES = [
 ]
 
 EDGE_VOICES = [
-    # American
+    # American English
     {"id": "en-US-GuyNeural", "name": "Guy (US Male - Natural & Conversational)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
     {"id": "en-US-JennyNeural", "name": "Jenny (US Female - Crisp & Friendly)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
     {"id": "en-US-ChristopherNeural", "name": "Christopher (US Male - Deep & Authoritative)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
-    {"id": "en-US-AriaNeural", "name": "Aria (US Female - Expressive)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
-    {"id": "en-US-EricNeural", "name": "Eric (US Male - Smooth)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"},
-    # British
-    {"id": "en-GB-RyanNeural", "name": "Ryan (British Male - Tech Tutor)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
-    {"id": "en-GB-SoniaNeural", "name": "Sonia (British Female - Academic)", "accent": "British", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
-    {"id": "en-GB-ThomasNeural", "name": "Thomas (British Male - Clear)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐"},
-    # Australian
-    {"id": "en-AU-WilliamNeural", "name": "William (Australian Male - Warm)", "accent": "Australian", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
-    {"id": "en-AU-NatashaNeural", "name": "Natasha (Australian Female - Articulate)", "accent": "Australian", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"}
+    {"id": "en-US-AriaNeural", "name": "Aria (US Female - Highly Expressive)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-BrianNeural", "name": "Brian (US Male - Natural Narrator)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-AvaNeural", "name": "Ava (US Female - Warm & Modern)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-AndrewNeural", "name": "Andrew (US Male - Friendly & Clear)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-EmmaNeural", "name": "Emma (US Female - Articulate)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-US-EricNeural", "name": "Eric (US Male - Smooth Baritone)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"},
+    {"id": "en-US-MichelleNeural", "name": "Michelle (US Female - Professional)", "accent": "American", "gender": "Female", "quality": "⭐⭐⭐⭐"},
+    {"id": "en-US-RogerNeural", "name": "Roger (US Male - Resonant)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"},
+    {"id": "en-US-SteffanNeural", "name": "Steffan (US Male - Casual Tech)", "accent": "American", "gender": "Male", "quality": "⭐⭐⭐⭐"},
+    # British English
+    {"id": "en-GB-RyanNeural", "name": "Ryan (British Male - Engaging Tech Tutor)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-GB-SoniaNeural", "name": "Sonia (British Female - Academic & Refined)", "accent": "British", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-GB-ThomasNeural", "name": "Thomas (British Male - Clear Oxford)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-GB-LibbyNeural", "name": "Libby (British Female - Modern & Crisp)", "accent": "British", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-GB-OliverNeural", "name": "Oliver (British Male - Warm & Conversational)", "accent": "British", "gender": "Male", "quality": "⭐⭐⭐⭐"},
+    {"id": "en-GB-MaisieNeural", "name": "Maisie (British Female - Friendly)", "accent": "British", "gender": "Female", "quality": "⭐⭐⭐⭐"},
+    # Australian English
+    {"id": "en-AU-WilliamMultilingualNeural", "name": "William (Australian Male - Warm & Natural)", "accent": "Australian", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-AU-NatashaNeural", "name": "Natasha (Australian Female - Articulate)", "accent": "Australian", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    # Canadian English
+    {"id": "en-CA-LiamNeural", "name": "Liam (Canadian Male - Clear & Balanced)", "accent": "Canadian", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-CA-ClaraNeural", "name": "Clara (Canadian Female - Expressive)", "accent": "Canadian", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    # Irish English
+    {"id": "en-IE-ConnorNeural", "name": "Connor (Irish Male - Engaging)", "accent": "Irish", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-IE-EmilyNeural", "name": "Emily (Irish Female - Melodic)", "accent": "Irish", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"},
+    # Indian English
+    {"id": "en-IN-PrabhatNeural", "name": "Prabhat (Indian Male - Technical Specialist)", "accent": "Indian", "gender": "Male", "quality": "⭐⭐⭐⭐⭐"},
+    {"id": "en-IN-NeerjaExpressiveNeural", "name": "Neerja (Indian Female - Expressive)", "accent": "Indian", "gender": "Female", "quality": "⭐⭐⭐⭐⭐"}
 ]
 
 PIPER_VOICES = [

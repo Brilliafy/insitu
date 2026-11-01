@@ -139,9 +139,9 @@ async def get_tutor_mode() -> str:
             "MODE 1: SECTION SCAFFOLD (Feature Flow)\n"
             "- Focus editor on relevant file and section using `highlight_and_navigate`.\n"
             "- Ask a concise Socratic question on how to proceed, what edge cases exist, or architectural design.\n"
-            "- Call `speak_to_user` with your question, then HALT and wait for user response.\n"
-            "- Once user answers, write ONLY the immediate scaffolding/section (do NOT implement the whole file).\n"
-            "- Highlight the newly written code and give brief considerations on what's next."
+            "- Call `speak_to_user` with your question or architectural insight first.\n"
+            "- When replacing or scaffolding code, DIRECTLY EDIT and REPLACE the highlighted section in the active file using your file editing tools (do NOT implement the whole file, only the immediate section).\n"
+            "- Highlight the newly written code and give brief considerations on what's next in chat."
         ),
         2: (
             "MODE 2: LINE-BY-LINE STEP (Pedagogical Micro-Steps)\n"
