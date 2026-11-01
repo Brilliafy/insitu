@@ -70,7 +70,7 @@ class InSituRuntime:
             if self.active_tts_proc.poll() is None:
                 return True
             self.active_tts_proc = None
-        return tts_player.is_speech_playing()
+        return tts_player.is_speaking()
 
     def get_cuda_vram_mb(self) -> int:
         try:
@@ -113,17 +113,12 @@ class InSituRuntime:
             self.whisper_device = "cpu"
 
     def warm_tts(self):
-        print("[InSitu Daemon] Prewarming TTS models in memory (Kokoro & Piper)...")
-        t0 = time.time()
-        try:
-            self.kokoro = tts_player.get_kokoro_instance()
-            print(f"[InSitu Daemon] ✅ Kokoro TTS resident in RAM ({time.time() - t0:.2f}s).")
-        except Exception as e:
-            print(f"[InSitu Daemon] Warning warming Kokoro: {e}", file=sys.stderr)
-
+        print("[InSitu Daemon] Prewarming TTS in memory (Piper Voice)...")
         try:
             from piper.voice import PiperVoice
-            piper_model_path = "/home/Aelfwif/insitu/server/models/piper/en_US-lessac-medium.onnx"
+            piper_model_path = "/home/Aelfwif/insitu/server/models/piper/en_US-bryce-medium.onnx"
+            if not os.path.exists(piper_model_path):
+                piper_model_path = "/home/Aelfwif/insitu/server/models/piper/en_US-lessac-medium.onnx"
             if os.path.exists(piper_model_path):
                 t1 = time.time()
                 self.piper_voice = PiperVoice.load(piper_model_path)
